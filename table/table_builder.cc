@@ -151,8 +151,8 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
 
   // TODO(postrelease): Support more compression options: zlib?
   if (compressor) {
- 		std::string& compressed = r->compressed_output;
-		compressor->compress(raw.data(), raw.size(), compressed);
+     std::string& compressed = r->compressed_output;
+    compressor->compress(raw.data(), raw.size(), compressed);
 
       if ( compressed.size() < raw.size() - (raw.size() / 8u)) {
         block_contents = compressed;
@@ -160,11 +160,11 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
         // Snappy not supported, or compressed less than 12.5%, so just
         // store uncompressed form
         block_contents = raw;
-		compressor = nullptr;
+    compressor = nullptr;
       }
   }
   else 
-	  block_contents = raw;
+    block_contents = raw;
 
   WriteRawBlock(block_contents, compressor, handle);
   r->compressed_output.clear();
@@ -180,7 +180,7 @@ void TableBuilder::WriteRawBlock(const Slice& block_contents,
   r->status = r->file->Append(block_contents);
   if (r->status.ok()) {
     char trailer[kBlockTrailerSize];
-	trailer[0] = compressor ? compressor->uniqueCompressionID : 0;
+  trailer[0] = compressor ? compressor->uniqueCompressionID : 0;
     uint32_t crc = crc32c::Value(block_contents.data(), block_contents.size());
     crc = crc32c::Extend(crc, trailer, 1);  // Extend crc to cover block type
     EncodeFixed32(trailer+1, crc32c::Mask(crc));

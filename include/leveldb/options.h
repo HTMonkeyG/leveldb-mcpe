@@ -178,7 +178,7 @@ struct DLLX ReadOptions {
       : verify_checksums(false),
         fill_cache(true),
         snapshot(NULL),
-		decompress_allocator(NULL) {
+    decompress_allocator(NULL) {
   }
 };
 

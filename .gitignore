@@ -17,3 +17,5 @@ CMakeFiles*
 build*/
 Win32/
 leveldb.dir/
+
+.vscode/

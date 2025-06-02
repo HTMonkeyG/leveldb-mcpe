@@ -20,14 +20,14 @@ namespace leveldb {
 
 class DLLX Status {
  public:
-	 
+   
   enum Code {
-	  kOk = 0,
-	  kNotFound = 1,
-	  kCorruption = 2,
-	  kNotSupported = 3,
-	  kInvalidArgument = 4,
-	  kIOError = 5
+    kOk = 0,
+    kNotFound = 1,
+    kCorruption = 2,
+    kNotSupported = 3,
+    kInvalidArgument = 4,
+    kIOError = 5
   };
 
   // Create a success status.
@@ -59,7 +59,7 @@ class DLLX Status {
   }
 
   Code code() const {
-	  return (state_ == NULL) ? kOk : static_cast<Code>(state_[4]);
+    return (state_ == NULL) ? kOk : static_cast<Code>(state_[4]);
   }
 
   // Returns true iff the status indicates success.

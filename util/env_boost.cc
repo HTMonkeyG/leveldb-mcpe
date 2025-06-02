@@ -251,7 +251,7 @@ class BoostEnv : public Env {
  public:
   BoostEnv();
   virtual ~BoostEnv() {
-	  fprintf(stderr, "Destroying Env::Default()\n");
+    fprintf(stderr, "Destroying Env::Default()\n");
   }
 
   virtual Status NewSequentialFile(const std::string& fname,
@@ -391,7 +391,7 @@ class BoostEnv : public Env {
   virtual Status LockFile(const std::string& fname, FileLock** lock) {
     *lock = NULL;
 
-	Status status;
+  Status status;
     try {
       if (!boost::filesystem::exists(fname)) {
         std::ofstream of(fname, std::ios_base::trunc | std::ios_base::out);
@@ -405,11 +405,11 @@ class BoostEnv : public Env {
       my_lock->fl_.lock();
       *lock = my_lock;
     }
-	catch (const std::exception & e) {
+  catch (const std::exception & e) {
       status = Status::IOError("lock " + fname, e.what());
     }
 
-	return status;
+  return status;
   }
 
   virtual Status UnlockFile(FileLock* lock) {

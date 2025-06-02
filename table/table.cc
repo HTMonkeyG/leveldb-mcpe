@@ -187,7 +187,7 @@ Iterator* Table::BlockReader(void* arg,
       if (cache_handle != NULL) {
         block = reinterpret_cast<Block*>(block_cache->Value(cache_handle));
       } else {
-		  s = ReadBlock(table->rep_->file, table->rep_->options, options, handle, &contents);
+      s = ReadBlock(table->rep_->file, table->rep_->options, options, handle, &contents);
         if (s.ok()) {
           block = new Block(contents);
           if (contents.cachable && options.fill_cache) {
@@ -197,7 +197,7 @@ Iterator* Table::BlockReader(void* arg,
         }
       }
     } else {
-		s = ReadBlock(table->rep_->file, table->rep_->options, options, handle, &contents);
+    s = ReadBlock(table->rep_->file, table->rep_->options, options, handle, &contents);
       if (s.ok()) {
         block = new Block(contents);
       }

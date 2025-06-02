@@ -651,7 +651,7 @@ void DBImpl::MaybeScheduleCompaction() {
   } else if (shutting_down_.Acquire_Load()) {
     // DB is being deleted; no more background compactions
   } else if (imm_ == NULL && suspending_compaction_.Acquire_Load()) {
-	// DB is being suspended; no more background compactions
+  // DB is being suspended; no more background compactions
   } else if (!bg_error_.ok()) {
     // Already got an error; no more changes
   } else if (imm_ == NULL &&
@@ -665,20 +665,20 @@ void DBImpl::MaybeScheduleCompaction() {
 }
 
 void DBImpl::SuspendCompaction() {
-	// set suspend flag and wait for any currently executing bg tasks to complete
+  // set suspend flag and wait for any currently executing bg tasks to complete
     Log(options_.info_log, "BG suspend compaction\n");
-	mutex_.Lock();
-	suspending_compaction_.Release_Store(this);  // Any non-NULL value is ok
-	mutex_.Unlock();
-	Log(options_.info_log, "BG suspended\n");
+  mutex_.Lock();
+  suspending_compaction_.Release_Store(this);  // Any non-NULL value is ok
+  mutex_.Unlock();
+  Log(options_.info_log, "BG suspended\n");
 }
 
 void DBImpl::ResumeCompaction() {
     Log(options_.info_log, "BG resume compaction\n");
     mutex_.Lock();
-	suspending_compaction_.Release_Store(nullptr);
-	mutex_.Unlock();
-	Log(options_.info_log, "db BG resumed\n");
+  suspending_compaction_.Release_Store(nullptr);
+  mutex_.Unlock();
+  Log(options_.info_log, "db BG resumed\n");
 }
 
 void DBImpl::BGWork(void* db) {
@@ -1454,51 +1454,51 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
       }
     }
     return true;
-	// BLOCK ADDED FOR MINECRAFT
+  // BLOCK ADDED FOR MINECRAFT
   } else if (in == "jsonstats") {
-	  char buf[200];
-	  value->append("{\n");
-	  value->append("\"levels\"");
-	  value->append(": [\n");
-	  bool first = true;
-	  for (int level = 0; level < config::kNumLevels; level++) {
-		  int files = versions_->NumLevelFiles(level);
-		  if (stats_[level].micros > 0 || files > 0) {
+    char buf[200];
+    value->append("{\n");
+    value->append("\"levels\"");
+    value->append(": [\n");
+    bool first = true;
+    for (int level = 0; level < config::kNumLevels; level++) {
+      int files = versions_->NumLevelFiles(level);
+      if (stats_[level].micros > 0 || files > 0) {
 
-			  // Nth items in array append ,\n to previous entry
-			  if (!first) {
-				  value->append(",\n");
-			  }
-			  value->append("{\n");
+        // Nth items in array append ,\n to previous entry
+        if (!first) {
+          value->append(",\n");
+        }
+        value->append("{\n");
 
-			  value->append("\"level\"");
-			  snprintf(buf, sizeof(buf), ": %3d,\n", level);
-			  value->append(buf);
+        value->append("\"level\"");
+        snprintf(buf, sizeof(buf), ": %3d,\n", level);
+        value->append(buf);
 
-			  value->append("\"files\"");
-			  snprintf(buf, sizeof(buf), ": %3d,\n", files);
-			  value->append(buf);
+        value->append("\"files\"");
+        snprintf(buf, sizeof(buf), ": %3d,\n", files);
+        value->append(buf);
 
-			  snprintf(buf, sizeof(buf), "\"sizeMB\": %0.3f,\n", versions_->NumLevelBytes(level) / 1048576.0);
-			  value->append(buf);
+        snprintf(buf, sizeof(buf), "\"sizeMB\": %0.3f,\n", versions_->NumLevelBytes(level) / 1048576.0);
+        value->append(buf);
 
-			  snprintf(buf, sizeof(buf), "\"tsec\": %0.3f,\n", stats_[level].micros / 1e6);
-			  value->append(buf);
+        snprintf(buf, sizeof(buf), "\"tsec\": %0.3f,\n", stats_[level].micros / 1e6);
+        value->append(buf);
 
-			  snprintf(buf, sizeof(buf), "\"readMB\": %0.3f,\n", stats_[level].bytes_read / 1048576.0);
-			  value->append(buf);
+        snprintf(buf, sizeof(buf), "\"readMB\": %0.3f,\n", stats_[level].bytes_read / 1048576.0);
+        value->append(buf);
 
-			  snprintf(buf, sizeof(buf), "\"writeMB\": %0.3f\n", stats_[level].bytes_written / 1048576.0);
-			  value->append(buf);
+        snprintf(buf, sizeof(buf), "\"writeMB\": %0.3f\n", stats_[level].bytes_written / 1048576.0);
+        value->append(buf);
 
-			  // append end }
-			  value->append("}");
+        // append end }
+        value->append("}");
 
-			  first = false;
-		  }
-	  }
-	  value->append("]\n");
-	  value->append("}");
+        first = false;
+      }
+    }
+    value->append("]\n");
+    value->append("}");
 
   } else if (in == "sstables") {
     *value = versions_->current()->DebugString();

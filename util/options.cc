@@ -25,6 +25,6 @@ Options::Options()
       reuse_logs(false),
       filter_policy(NULL) {
 
-	memset(compressors, 0, sizeof(compressors));
+  memset(compressors, 0, sizeof(compressors));
 }
 }  // namespace leveldb

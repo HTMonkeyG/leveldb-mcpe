@@ -38,9 +38,9 @@
 #define ZLIB
 
 #ifdef SNAPPY
-	#include <snappy/snappy.h>
+  #include <snappy/snappy.h>
 #elif defined(ZLIB)
-	#include <zlib.h>
+  #include <zlib.h>
 #endif
 
 namespace leveldb {

@@ -65,7 +65,7 @@ class FileState {
     assert(offset / kBlockSize <= SIZE_MAX);
     size_t block = static_cast<size_t>(offset / kBlockSize);
 
-	size_t block_offset = offset % kBlockSize;
+  size_t block_offset = offset % kBlockSize;
 
     if (n <= kBlockSize - block_offset) {
       // The requested bytes are all in the first block.
@@ -169,9 +169,9 @@ class SequentialFileImpl : public SequentialFile {
     if (pos_ > file_->Size()) {
       return Status::IOError("pos_ > file_->Size()");
     }
-	const uint64_t available = file_->Size() - pos_;
+  const uint64_t available = file_->Size() - pos_;
 
-	if (n > available) {
+  if (n > available) {
       n = available;
     }
     pos_ += n;

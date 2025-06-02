@@ -99,7 +99,7 @@ SequenceNumber WriteBatchInternal::Sequence(const WriteBatch* b) {
 }
 
 void WriteBatchInternal::SetSequence(WriteBatch* b, SequenceNumber seq) {
-	EncodeFixed64(&b->rep_[0], seq);
+  EncodeFixed64(&b->rep_[0], seq);
 }
 
 void WriteBatch::Put(const Slice& key, const Slice& value) {
