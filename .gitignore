@@ -8,6 +8,8 @@ build_config.mk
 db_bench
 leveldbutil
 bin/
+*.txt
+*.exe
 
 CMakeCache*
 *.cmake
@@ -17,5 +19,7 @@ CMakeFiles*
 build*/
 Win32/
 leveldb.dir/
+dist/
+test*
 
 .vscode/
