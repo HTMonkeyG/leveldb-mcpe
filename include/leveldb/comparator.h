@@ -6,6 +6,7 @@
 #define STORAGE_LEVELDB_INCLUDE_COMPARATOR_H_
 
 #include <string>
+#include "leveldb/dbconfig.h"
 
 namespace leveldb {
 

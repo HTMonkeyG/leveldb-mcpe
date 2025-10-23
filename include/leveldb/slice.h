@@ -20,6 +20,8 @@
 #include <string.h>
 #include <string>
 
+#include "leveldb/dbconfig.h"
+
 namespace leveldb {
 
 class DLLX Slice {

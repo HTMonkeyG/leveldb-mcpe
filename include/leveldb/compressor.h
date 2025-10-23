@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <unordered_map>
 #include <memory>
+#include "leveldb/dbconfig.h"
 
 namespace leveldb {
   class DLLX Slice;

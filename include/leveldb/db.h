@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include "leveldb/dbconfig.h"
 #include "leveldb/iterator.h"
 #include "leveldb/options.h"
 

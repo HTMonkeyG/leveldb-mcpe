@@ -1,6 +1,7 @@
 #pragma once
 
-#include "compressor.h"
+#include "leveldb/dbconfig.h"
+#include "leveldb/compressor.h"
 
 namespace leveldb {
   class DLLX SnappyCompressor : public Compressor 

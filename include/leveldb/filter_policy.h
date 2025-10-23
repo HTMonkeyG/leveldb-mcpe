@@ -17,6 +17,7 @@
 #define STORAGE_LEVELDB_INCLUDE_FILTER_POLICY_H_
 
 #include <string>
+#include "leveldb/dbconfig.h"
 
 namespace leveldb {
 

@@ -17,6 +17,7 @@
 #include <vector>
 #include <stdarg.h>
 #include <stdint.h>
+#include "leveldb/dbconfig.h"
 #include "leveldb/status.h"
 
 namespace leveldb {

@@ -9,6 +9,7 @@
 
 #include <memory>
 #include <unordered_map>
+#include "leveldb/dbconfig.h"
 
 namespace leveldb {
 

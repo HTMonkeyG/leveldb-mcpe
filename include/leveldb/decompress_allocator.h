@@ -6,6 +6,7 @@
 #include <mutex>
 #include <vector>
 #include <string>
+#include "leveldb/dbconfig.h"
 
 namespace leveldb {
   class DLLX DecompressAllocator {

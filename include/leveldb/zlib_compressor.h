@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include "leveldb/dbconfig.h"
 #include "leveldb/compressor.h"
 
 namespace leveldb {

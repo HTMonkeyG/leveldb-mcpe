@@ -23,6 +23,7 @@
 
 #include <string>
 #include <memory>
+#include "leveldb/dbconfig.h"
 #include "leveldb/status.h"
 
 namespace leveldb {
