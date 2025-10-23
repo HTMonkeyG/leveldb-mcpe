@@ -2,16 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-#include "leveldb/c.h"
-#include "leveldb/leveldb_internal.h"
+#include "leveldb_c.h"
+#include "leveldb_internal.h"
 
 #include <stdlib.h>
 #ifndef _WIN32
 #include <unistd.h>
 #endif
-#include "leveldb/zlib_compressor.h"
+#include "compressors/zlib_compressor.h"
 #ifdef SNAPPY
-#include "leveldb/snappy_compressor.h"
+#include "compressors/snappy_compressor.h"
 #endif
 
 using leveldb::Cache;

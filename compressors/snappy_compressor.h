@@ -1,6 +1,6 @@
 #pragma once
 
-#include "leveldb/leveldb_internal.h"
+#include "leveldb_internal.h"
 
 namespace leveldb {
 

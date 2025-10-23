@@ -17,14 +17,18 @@
 #include <memory>
 #include <unordered_map>
 
-#include "leveldb/leveldb_config.h"
-#include "leveldb/leveldb.h"
+#include "port/port.h"
+#include "port/thread_annotations.h"
+#include "leveldb_config.h"
+#include "leveldb.h"
 
 namespace leveldb {
 
 // Update Makefile if you change these
 static const int kMajorVersion = 1;
 static const int kMinorVersion = 20;
+
+struct BlockContents;
 
 // Type definitions.
 class DLLX BlockBuilder;
@@ -47,6 +51,334 @@ class DLLX TableBuilder;
 class DLLX TableCache;
 class DLLX WriteBatch;
 class DLLX WritableFile;
+
+// ----------------------------------------------------------------------------
+// - utils/arena.h
+// ----------------------------------------------------------------------------
+
+class Arena {
+ public:
+  Arena();
+  ~Arena();
+
+  // Return a pointer to a newly allocated memory block of "bytes" bytes.
+  char* Allocate(size_t bytes);
+
+  // Allocate memory with the normal alignment guarantees provided by malloc
+  char* AllocateAligned(size_t bytes);
+
+  // Returns an estimate of the total memory usage of data allocated
+  // by the arena.
+  size_t MemoryUsage() const {
+    return reinterpret_cast<uintptr_t>(memory_usage_.NoBarrier_Load());
+  }
+
+ private:
+  char* AllocateFallback(size_t bytes);
+  char* AllocateNewBlock(size_t block_bytes);
+
+  // Allocation state
+  char* alloc_ptr_;
+  size_t alloc_bytes_remaining_;
+
+  // Array of new[] allocated memory blocks
+  std::vector<char*> blocks_;
+
+  // Total memory usage of the arena.
+  port::AtomicPointer memory_usage_;
+
+  // No copying allowed
+  Arena(const Arena&);
+  void operator=(const Arena&);
+};
+
+inline char* Arena::Allocate(size_t bytes) {
+  // The semantics of what to return are a bit messy if we allow
+  // 0-byte allocations, so we disallow them here (we don't need
+  // them for our internal use).
+  assert(bytes > 0);
+  if (bytes <= alloc_bytes_remaining_) {
+    char* result = alloc_ptr_;
+    alloc_ptr_ += bytes;
+    alloc_bytes_remaining_ -= bytes;
+    return result;
+  }
+  return AllocateFallback(bytes);
+}
+
+// ----------------------------------------------------------------------------
+// - utils/coding.h
+//
+// Endian-neutral encoding:
+// * Fixed-length numbers are encoded with least-significant byte first
+// * In addition we support variable length "varint" encoding
+// * Strings are encoded prefixed by their length in varint format
+// ----------------------------------------------------------------------------
+
+// Standard Put... routines append to a string
+extern void PutFixed32(std::string* dst, uint32_t value);
+extern void PutFixed64(std::string* dst, uint64_t value);
+extern void PutVarint32(std::string* dst, uint32_t value);
+extern void PutVarint64(std::string* dst, uint64_t value);
+extern void PutLengthPrefixedSlice(std::string* dst, const Slice& value);
+
+// Standard Get... routines parse a value from the beginning of a Slice
+// and advance the slice past the parsed value.
+extern bool GetVarint32(Slice* input, uint32_t* value);
+extern bool GetVarint64(Slice* input, uint64_t* value);
+extern bool GetLengthPrefixedSlice(Slice* input, Slice* result);
+
+// Pointer-based variants of GetVarint...  These either store a value
+// in *v and return a pointer just past the parsed value, or return
+// NULL on error.  These routines only look at bytes in the range
+// [p..limit-1]
+extern const char* GetVarint32Ptr(const char* p,const char* limit, uint32_t* v);
+extern const char* GetVarint64Ptr(const char* p,const char* limit, uint64_t* v);
+
+// Returns the length of the varint32 or varint64 encoding of "v"
+extern int VarintLength(uint64_t v);
+
+// Lower-level versions of Put... that write directly into a character buffer
+// REQUIRES: dst has enough space for the value being written
+extern void EncodeFixed32(char* dst, uint32_t value);
+extern void EncodeFixed64(char* dst, uint64_t value);
+
+// Lower-level versions of Put... that write directly into a character buffer
+// and return a pointer just past the last byte written.
+// REQUIRES: dst has enough space for the value being written
+extern char* EncodeVarint32(char* dst, uint32_t value);
+extern char* EncodeVarint64(char* dst, uint64_t value);
+
+// Lower-level versions of Get... that read directly from a character buffer
+// without any bounds checking.
+
+inline uint32_t DecodeFixed32(const char* ptr) {
+  if (port::kLittleEndian) {
+    // Load the raw bytes
+    uint32_t result;
+    memcpy(&result, ptr, sizeof(result));  // gcc optimizes this to a plain load
+    return result;
+  } else {
+    return ((static_cast<uint32_t>(static_cast<unsigned char>(ptr[0])))
+        | (static_cast<uint32_t>(static_cast<unsigned char>(ptr[1])) << 8)
+        | (static_cast<uint32_t>(static_cast<unsigned char>(ptr[2])) << 16)
+        | (static_cast<uint32_t>(static_cast<unsigned char>(ptr[3])) << 24));
+  }
+}
+
+inline uint64_t DecodeFixed64(const char* ptr) {
+  if (port::kLittleEndian) {
+    // Load the raw bytes
+    uint64_t result;
+    memcpy(&result, ptr, sizeof(result));  // gcc optimizes this to a plain load
+    return result;
+  } else {
+    uint64_t lo = DecodeFixed32(ptr);
+    uint64_t hi = DecodeFixed32(ptr + 4);
+    return (hi << 32) | lo;
+  }
+}
+
+// Internal routine for use by fallback path of GetVarint32Ptr
+extern const char* GetVarint32PtrFallback(const char* p,
+                                          const char* limit,
+                                          uint32_t* value);
+inline const char* GetVarint32Ptr(const char* p,
+                                  const char* limit,
+                                  uint32_t* value) {
+  if (p < limit) {
+    uint32_t result = *(reinterpret_cast<const unsigned char*>(p));
+    if ((result & 128) == 0) {
+      *value = result;
+      return p + 1;
+    }
+  }
+  return GetVarint32PtrFallback(p, limit, value);
+}
+
+// ----------------------------------------------------------------------------
+// - utils/crc32c.h
+// ----------------------------------------------------------------------------
+
+namespace crc32c {
+
+// Return the crc32c of concat(A, data[0,n-1]) where init_crc is the
+// crc32c of some string A.  Extend() is often used to maintain the
+// crc32c of a stream of data.
+extern uint32_t Extend(uint32_t init_crc, const char* data, size_t n);
+
+// Return the crc32c of data[0,n-1]
+inline uint32_t Value(const char* data, size_t n) {
+  return Extend(0, data, n);
+}
+
+static const uint32_t kMaskDelta = 0xa282ead8ul;
+
+// Return a masked representation of crc.
+//
+// Motivation: it is problematic to compute the CRC of a string that
+// contains embedded CRCs.  Therefore we recommend that CRCs stored
+// somewhere (e.g., in files) should be masked before being stored.
+inline uint32_t Mask(uint32_t crc) {
+  // Rotate right by 15 bits and add a constant.
+  return ((crc >> 15) | (crc << 17)) + kMaskDelta;
+}
+
+// Return the crc whose masked representation is masked_crc.
+inline uint32_t Unmask(uint32_t masked_crc) {
+  uint32_t rot = masked_crc - kMaskDelta;
+  return ((rot >> 17) | (rot << 15));
+}
+
+} // namespace crc32c
+
+// ----------------------------------------------------------------------------
+// - utils/hash.h
+// ----------------------------------------------------------------------------
+
+extern uint32_t Hash(const char* data, size_t n, uint32_t seed);
+
+// ----------------------------------------------------------------------------
+// - utils/histogram.h
+// ----------------------------------------------------------------------------
+
+class Histogram {
+ public:
+  Histogram() { }
+  ~Histogram() { }
+
+  void Clear();
+  void Add(double value);
+  void Merge(const Histogram& other);
+
+  std::string ToString() const;
+
+ private:
+  double min_;
+  double max_;
+  double num_;
+  double sum_;
+  double sum_squares_;
+
+  enum { kNumBuckets = 154 };
+  static const double kBucketLimit[kNumBuckets];
+  double buckets_[kNumBuckets];
+
+  double Median() const;
+  double Percentile(double p) const;
+  double Average() const;
+  double StandardDeviation() const;
+};
+
+// ----------------------------------------------------------------------------
+// - utils/logging.h
+//
+// Must not be included from any .h files to avoid polluting the namespace
+// with macros.
+// ----------------------------------------------------------------------------
+
+// Append a human-readable printout of "num" to *str
+extern void AppendNumberTo(std::string* str, uint64_t num);
+
+// Append a human-readable printout of "value" to *str.
+// Escapes any non-printable characters found in "value".
+extern void AppendEscapedStringTo(std::string* str, const Slice& value);
+
+// Return a human-readable printout of "num"
+extern std::string NumberToString(uint64_t num);
+
+// Return a human-readable version of "value".
+// Escapes any non-printable characters found in "value".
+extern std::string EscapeString(const Slice& value);
+
+// Parse a human-readable number from "*in" into *value.  On success,
+// advances "*in" past the consumed number and sets "*val" to the
+// numeric value.  Otherwise, returns false and leaves *in in an
+// unspecified state.
+extern bool ConsumeDecimalNumber(Slice* in, uint64_t* val);
+
+// ----------------------------------------------------------------------------
+// - utils/mutexlock.h
+// ----------------------------------------------------------------------------
+
+// Helper class that locks a mutex on construction and unlocks the mutex when
+// the destructor of the MutexLock object is invoked.
+//
+// Typical usage:
+//
+//   void MyClass::MyMethod() {
+//     MutexLock l(&mu_);       // mu_ is an instance variable
+//     ... some complex code, possibly with multiple return paths ...
+//   }
+
+class SCOPED_LOCKABLE MutexLock {
+ public:
+  explicit MutexLock(port::Mutex *mu) EXCLUSIVE_LOCK_FUNCTION(mu)
+      : mu_(mu)  {
+    this->mu_->Lock();
+  }
+  ~MutexLock() UNLOCK_FUNCTION() { this->mu_->Unlock(); }
+
+ private:
+  port::Mutex *const mu_;
+  // No copying allowed
+  MutexLock(const MutexLock&);
+  void operator=(const MutexLock&);
+};
+
+// ----------------------------------------------------------------------------
+// - utils/random.h
+// ----------------------------------------------------------------------------
+
+// A very simple random number generator.  Not especially good at
+// generating truly random bits, but good enough for our needs in this
+// package.
+class Random {
+ private:
+  uint32_t seed_;
+ public:
+  explicit Random(uint32_t s) : seed_(s & 0x7fffffffu) {
+    // Avoid bad seeds.
+    if (seed_ == 0 || seed_ == 2147483647L) {
+      seed_ = 1;
+    }
+  }
+  uint32_t Next() {
+    static const uint32_t M = 2147483647L;   // 2^31-1
+    static const uint64_t A = 16807;  // bits 14, 8, 7, 5, 2, 1, 0
+    // We are computing
+    //       seed_ = (seed_ * A) % M,    where M = 2^31-1
+    //
+    // seed_ must not be zero or M, or else all subsequent computed values
+    // will be zero or M respectively.  For all other values, seed_ will end
+    // up cycling through every number in [1,M-1]
+    uint64_t product = seed_ * A;
+
+    // Compute (product % M) using the fact that ((x << 31) % M) == x.
+    seed_ = static_cast<uint32_t>((product >> 31) + (product & M));
+    // The first reduction may overflow by 1 bit, so we may need to
+    // repeat.  mod == M is not possible; using > allows the faster
+    // sign-bit-based test.
+    if (seed_ > M) {
+      seed_ -= M;
+    }
+    return seed_;
+  }
+  // Returns a uniformly distributed value in the range [0..n-1]
+  // REQUIRES: n > 0
+  uint32_t Uniform(int n) { return Next() % n; }
+
+  // Randomly returns true ~"1/n" of the time, and false otherwise.
+  // REQUIRES: n > 0
+  bool OneIn(int n) { return (Next() % n) == 0; }
+
+  // Skewed: pick "base" uniformly from range [0,max_log] and then
+  // return "base" random bits.  The effect is to pick a number in the
+  // range [0,2^max_log-1] with exponential bias towards smaller numbers.
+  uint32_t Skewed(int max_log) {
+    return Uniform(1 << Uniform(max_log + 1));
+  }
+};
 
 // ----------------------------------------------------------------------------
 // - cache.h
@@ -966,6 +1298,313 @@ public:
 // ordering.  The result remains the property of this module and
 // must not be deleted.
 extern const Comparator *BytewiseComparator();
+
+// ----------------------------------------------------------------------------
+// - table/block_builder.h
+// ----------------------------------------------------------------------------
+
+class BlockBuilder {
+public:
+  explicit BlockBuilder(const Options* options);
+
+  // Reset the contents as if the BlockBuilder was just constructed.
+  void Reset();
+
+  // REQUIRES: Finish() has not been called since the last call to Reset().
+  // REQUIRES: key is larger than any previously added key
+  void Add(const Slice& key, const Slice& value);
+
+  // Finish building the block and return a slice that refers to the
+  // block contents.  The returned slice will remain valid for the
+  // lifetime of this builder or until Reset() is called.
+  Slice Finish();
+
+  // Returns an estimate of the current (uncompressed) size of the block
+  // we are building.
+  size_t CurrentSizeEstimate() const;
+
+  // Return true iff no entries have been added since the last Reset()
+  bool empty() const {
+    return buffer_.empty();
+  }
+
+private:
+  const Options*        options_;
+  std::string           buffer_;      // Destination buffer
+  std::vector<uint32_t> restarts_;    // Restart points
+  int                   counter_;     // Number of entries emitted since restart
+  bool                  finished_;    // Has Finish() been called?
+  std::string           last_key_;
+
+  // No copying allowed
+  BlockBuilder(const BlockBuilder&);
+  void operator=(const BlockBuilder&);
+};
+
+// ----------------------------------------------------------------------------
+// - table/block.h
+// ----------------------------------------------------------------------------
+
+class Block {
+ public:
+  // Initialize the block with the specified contents.
+  explicit Block(const BlockContents& contents);
+
+  ~Block();
+
+  size_t size() const { return size_; }
+  Iterator* NewIterator(const Comparator* comparator);
+
+ private:
+  uint32_t NumRestarts() const;
+
+  const char* data_;
+  size_t size_;
+  uint32_t restart_offset_;     // Offset in data_ of restart array
+  bool owned_;                  // Block owns data_[]
+
+  // No copying allowed
+  Block(const Block&);
+  void operator=(const Block&);
+
+  class Iter;
+};
+
+// ----------------------------------------------------------------------------
+// - table/filter_block.h
+//
+// A filter block is stored near the end of a Table file.  It contains
+// filters (e.g., bloom filters) for all data blocks in the table combined
+// into a single filter block.
+// ----------------------------------------------------------------------------
+
+// A FilterBlockBuilder is used to construct all of the filters for a
+// particular Table.  It generates a single string which is stored as
+// a special block in the Table.
+//
+// The sequence of calls to FilterBlockBuilder must match the regexp:
+//      (StartBlock AddKey*)* Finish
+class FilterBlockBuilder {
+ public:
+  explicit FilterBlockBuilder(const FilterPolicy*);
+
+  void StartBlock(uint64_t block_offset);
+  void AddKey(const Slice& key);
+  Slice Finish();
+
+ private:
+  void GenerateFilter();
+
+  const FilterPolicy* policy_;
+  std::string keys_;              // Flattened key contents
+  std::vector<size_t> start_;     // Starting index in keys_ of each key
+  std::string result_;            // Filter data computed so far
+  std::vector<Slice> tmp_keys_;   // policy_->CreateFilter() argument
+  std::vector<uint32_t> filter_offsets_;
+
+  // No copying allowed
+  FilterBlockBuilder(const FilterBlockBuilder&);
+  void operator=(const FilterBlockBuilder&);
+};
+
+class FilterBlockReader {
+public:
+  // REQUIRES: "contents" and *policy must stay live while *this is live.
+  FilterBlockReader(const FilterPolicy* policy, const Slice& contents);
+  bool KeyMayMatch(uint64_t block_offset, const Slice& key);
+
+private:
+  const FilterPolicy* policy_;
+  const char* data_;    // Pointer to filter data (at block-start)
+  const char* offset_;  // Pointer to beginning of offset array (at block-end)
+  size_t num_;          // Number of entries in offset array
+  size_t base_lg_;      // Encoding parameter (see kFilterBaseLg in .cc file)
+};
+
+// ----------------------------------------------------------------------------
+// - table/format.h
+// ----------------------------------------------------------------------------
+
+// BlockHandle is a pointer to the extent of a file that stores a data
+// block or a meta block.
+class BlockHandle {
+ public:
+  BlockHandle();
+
+  // The offset of the block in the file.
+  uint64_t offset() const { return offset_; }
+  void set_offset(uint64_t offset) { offset_ = offset; }
+
+  // The size of the stored block
+  uint64_t size() const { return size_; }
+  void set_size(uint64_t size) { size_ = size; }
+
+  void EncodeTo(std::string* dst) const;
+  Status DecodeFrom(Slice* input);
+
+  // Maximum encoding length of a BlockHandle
+  enum { kMaxEncodedLength = 10 + 10 };
+
+ private:
+  uint64_t offset_;
+  uint64_t size_;
+};
+
+// Footer encapsulates the fixed information stored at the tail
+// end of every table file.
+class Footer {
+ public:
+  Footer() { }
+
+  // The block handle for the metaindex block of the table
+  const BlockHandle& metaindex_handle() const { return metaindex_handle_; }
+  void set_metaindex_handle(const BlockHandle& h) { metaindex_handle_ = h; }
+
+  // The block handle for the index block of the table
+  const BlockHandle& index_handle() const {
+    return index_handle_;
+  }
+  void set_index_handle(const BlockHandle& h) {
+    index_handle_ = h;
+  }
+
+  void EncodeTo(std::string* dst) const;
+  Status DecodeFrom(Slice* input);
+
+  // Encoded length of a Footer.  Note that the serialization of a
+  // Footer will always occupy exactly this many bytes.  It consists
+  // of two block handles and a magic number.
+  enum {
+    kEncodedLength = 2*BlockHandle::kMaxEncodedLength + 8
+  };
+
+ private:
+  BlockHandle metaindex_handle_;
+  BlockHandle index_handle_;
+};
+
+// kTableMagicNumber was picked by running
+//    echo http://code.google.com/p/leveldb/ | sha1sum
+// and taking the leading 64 bits.
+static const uint64_t kTableMagicNumber = 0xdb4775248b80fb57ull;
+
+// 1-byte type + 32-bit crc
+static const size_t kBlockTrailerSize = 5;
+
+struct BlockContents {
+  Slice data;           // Actual contents of data
+  bool cachable;        // True iff data can be cached
+  bool heap_allocated;  // True iff caller should delete[] data.data()
+};
+
+// Read the block identified by "handle" from "file".  On failure
+// return non-OK.  On success fill *result and return OK.
+extern Status ReadBlock(RandomAccessFile* file,
+            const Options& dbOptions,
+                        const ReadOptions& options,
+                        const BlockHandle& handle,
+                        BlockContents* result);
+
+// Implementation details follow.  Clients should ignore,
+
+inline BlockHandle::BlockHandle()
+    : offset_(~static_cast<uint64_t>(0)),
+      size_(~static_cast<uint64_t>(0)) {
+}
+
+// ----------------------------------------------------------------------------
+// - table/iterator_wrapper.h
+// ----------------------------------------------------------------------------
+
+// A internal wrapper class with an interface similar to Iterator that
+// caches the valid() and key() results for an underlying iterator.
+// This can help avoid virtual function calls and also gives better
+// cache locality.
+class IteratorWrapper {
+public:
+  IteratorWrapper(): iter_(NULL), valid_(false) { }
+  explicit IteratorWrapper(Iterator* iter): iter_(NULL) {
+    Set(iter);
+  }
+  ~IteratorWrapper() { delete iter_; }
+  Iterator* iter() const { return iter_; }
+
+  // Takes ownership of "iter" and will delete it when destroyed, or
+  // when Set() is invoked again.
+  void Set(Iterator* iter) {
+    delete iter_;
+    iter_ = iter;
+    if (iter_ == NULL) {
+      valid_ = false;
+    } else {
+      Update();
+    }
+  }
+
+
+  // Iterator interface methods
+  bool Valid() const        { return valid_; }
+  Slice key() const         { assert(Valid()); return key_; }
+  Slice value() const       { assert(Valid()); return iter_->value(); }
+  // Methods below require iter() != NULL
+  Status status() const     { assert(iter_); return iter_->status(); }
+  void Next()               { assert(iter_); iter_->Next();        Update(); }
+  void Prev()               { assert(iter_); iter_->Prev();        Update(); }
+  void Seek(const Slice& k) { assert(iter_); iter_->Seek(k);       Update(); }
+  void SeekToFirst()        { assert(iter_); iter_->SeekToFirst(); Update(); }
+  void SeekToLast()         { assert(iter_); iter_->SeekToLast();  Update(); }
+
+private:
+  void Update() {
+    valid_ = iter_->Valid();
+    if (valid_) {
+      key_ = iter_->key();
+    }
+  }
+
+  Iterator* iter_;
+  bool valid_;
+  Slice key_;
+};
+
+// ----------------------------------------------------------------------------
+// - table/merger.h
+// ----------------------------------------------------------------------------
+
+// Return an iterator that provided the union of the data in
+// children[0,n-1].  Takes ownership of the child iterators and
+// will delete them when the result iterator is deleted.
+//
+// The result does no duplicate suppression.  I.e., if a particular
+// key is present in K child iterators, it will be yielded K times.
+//
+// REQUIRES: n >= 0
+extern Iterator *NewMergingIterator(
+  const Comparator *comparator,
+  Iterator **children,
+  int n);
+
+// ----------------------------------------------------------------------------
+// - table/two_level_iterator.h
+// ----------------------------------------------------------------------------
+
+// Return a new two level iterator.  A two-level iterator contains an
+// index iterator whose values point to a sequence of blocks where
+// each block is itself a sequence of key,value pairs.  The returned
+// two-level iterator yields the concatenation of all key/value pairs
+// in the sequence of blocks.  Takes ownership of "index_iter" and
+// will delete it when no longer needed.
+//
+// Uses a supplied function to convert an index_iter value into
+// an iterator over the contents of the corresponding block.
+extern Iterator* NewTwoLevelIterator(
+  Iterator* index_iter,
+  Iterator* (*block_function)(
+    void* arg,
+    const ReadOptions& options,
+    const Slice& index_value),
+  void* arg,
+  const ReadOptions& options);
 
 }  // namespace leveldb
 

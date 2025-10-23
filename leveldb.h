@@ -8,7 +8,7 @@
 #include <string.h>
 #include <string>
 
-#include "leveldb/leveldb_config.h"
+#include "leveldb_config.h"
 
 namespace leveldb {
 

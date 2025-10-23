@@ -8,11 +8,11 @@
 #define STORAGE_LEVELDB_UTIL_WIN_LOGGER_H_
 
 #include <stdio.h>
-#include "leveldb/leveldb_internal.h"
+#include "leveldb_internal.h"
 
 namespace leveldb {
 
-class WinLogger : public Logger {
+class WinLogger: public Logger {
  private:
   FILE* file_;
  public:

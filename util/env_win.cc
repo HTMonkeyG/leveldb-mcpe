@@ -7,12 +7,10 @@
 #define VC_EXTRALEAN            // Exclude rarely-used stuff
 #define WIN32_LEAN_AND_MEAN     // Exclude rarely-used stuff from Windows headers
 #include <windows.h>
-#include "leveldb/leveldb_internal.h"
+#include "leveldb_internal.h"
 
 #include "util/win_logger.h"
 #include "port/port.h"
-#include "util/logging.h"
-
 
 #include <deque>
 #include <fstream>
