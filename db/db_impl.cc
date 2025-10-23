@@ -20,11 +20,7 @@
 #include "db/table_cache.h"
 #include "db/version_set.h"
 #include "db/write_batch_internal.h"
-#include "leveldb/db.h"
-#include "leveldb/env.h"
-#include "leveldb/status.h"
-#include "leveldb/table.h"
-#include "leveldb/table_builder.h"
+#include "leveldb/leveldb_internal.h"
 #include "port/port.h"
 #include "table/block.h"
 #include "table/merger.h"
@@ -74,11 +70,10 @@ struct DBImpl::CompactionState {
   Output* current_output() { return &outputs[outputs.size()-1]; }
 
   explicit CompactionState(Compaction* c)
-      : compaction(c),
-        outfile(NULL),
-        builder(NULL),
-        total_bytes(0) {
-  }
+    : compaction(c)
+    , outfile(NULL)
+    , builder(NULL)
+    , total_bytes(0) { }
 };
 
 // Fix user-supplied options to be reasonable
@@ -87,10 +82,12 @@ static void ClipToRange(T* ptr, V minvalue, V maxvalue) {
   if (static_cast<V>(*ptr) > maxvalue) *ptr = maxvalue;
   if (static_cast<V>(*ptr) < minvalue) *ptr = minvalue;
 }
-Options SanitizeOptions(const std::string& dbname,
-                        const InternalKeyComparator* icmp,
-                        const InternalFilterPolicy* ipolicy,
-                        const Options& src) {
+Options SanitizeOptions(
+  const std::string& dbname,
+  const InternalKeyComparator* icmp,
+  const InternalFilterPolicy* ipolicy,
+  const Options& src
+) {
   Options result = src;
   result.comparator = icmp;
   result.filter_policy = (src.filter_policy != NULL) ? ipolicy : NULL;
@@ -114,36 +111,46 @@ Options SanitizeOptions(const std::string& dbname,
   return result;
 }
 
-DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
-    : env_(raw_options.env),
-      internal_comparator_(raw_options.comparator),
-      internal_filter_policy_(raw_options.filter_policy),
-      options_(SanitizeOptions(dbname, &internal_comparator_,
-                               &internal_filter_policy_, raw_options)),
-      owns_info_log_(options_.info_log != raw_options.info_log),
-      owns_cache_(options_.block_cache != raw_options.block_cache),
-      dbname_(dbname),
-      db_lock_(NULL),
-      shutting_down_(NULL),
-      bg_cv_(&mutex_),
-      mem_(NULL),
-      imm_(NULL),
-      logfile_(NULL),
-      logfile_number_(0),
-      log_(NULL),
-      seed_(0),
-      tmp_batch_(new WriteBatch),
-      bg_compaction_scheduled_(false),
-      suspending_compaction_(NULL),
-      manual_compaction_(NULL) {
+DBImpl::DBImpl(
+  const Options& raw_options,
+  const std::string& dbname
+)
+  : env_(raw_options.env)
+  , internal_comparator_(raw_options.comparator)
+  , internal_filter_policy_(raw_options.filter_policy)
+  , options_(SanitizeOptions(dbname, &internal_comparator_,
+      &internal_filter_policy_, raw_options))
+  , owns_info_log_(options_.info_log != raw_options.info_log)
+  , owns_cache_(options_.block_cache != raw_options.block_cache)
+  , dbname_(dbname)
+  , db_lock_(NULL)
+  , shutting_down_(NULL)
+  , bg_cv_(&mutex_)
+  , mem_(NULL)
+  , imm_(NULL)
+  , logfile_(NULL)
+  , logfile_number_(0)
+  , log_(NULL)
+  , seed_(0)
+  , tmp_batch_(new WriteBatch)
+  , bg_compaction_scheduled_(false)
+  , suspending_compaction_(NULL)
+  , manual_compaction_(NULL)
+{
   has_imm_.Release_Store(NULL);
 
   // Reserve ten files or so for other uses and give the rest to TableCache.
   const int table_cache_size = options_.max_open_files - kNumNonTableCacheFiles;
-  table_cache_ = new TableCache(dbname_, &options_, table_cache_size);
+  table_cache_ = new TableCache(
+    dbname_,
+    &options_, 
+    table_cache_size);
 
-  versions_ = new VersionSet(dbname_, &options_, table_cache_,
-                             &internal_comparator_);
+  versions_ = new VersionSet(
+    dbname_,
+    &options_,
+    table_cache_,
+    &internal_comparator_);
 }
 
 DBImpl::~DBImpl() {
@@ -208,7 +215,9 @@ Status DBImpl::NewDB() {
   return s;
 }
 
-void DBImpl::MaybeIgnoreError(Status* s) const {
+void DBImpl::MaybeIgnoreError(
+  Status* s
+) const {
   if (s->ok() || options_.paranoid_checks) {
     // No change needed
   } else {
@@ -237,8 +246,9 @@ void DBImpl::DeleteObsoleteFiles() {
       bool keep = true;
       switch (type) {
         case kLogFile:
-          keep = ((number >= versions_->LogNumber()) ||
-                  (number == versions_->PrevLogNumber()));
+          keep = (
+            (number >= versions_->LogNumber())
+            || (number == versions_->PrevLogNumber()));
           break;
         case kDescriptorFile:
           // Keep my manifest file, and any newer incarnations'
@@ -264,16 +274,20 @@ void DBImpl::DeleteObsoleteFiles() {
         if (type == kTableFile) {
           table_cache_->Evict(number);
         }
-        Log(options_.info_log, "Delete type=%d #%lld\n",
-            int(type),
-            static_cast<unsigned long long>(number));
+        Log(
+          options_.info_log, "Delete type=%d #%lld\n",
+          int(type),
+          static_cast<unsigned long long>(number));
         env_->DeleteFile(dbname_ + "/" + filenames[i]);
       }
     }
   }
 }
 
-Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
+Status DBImpl::Recover(
+  VersionEdit* edit,
+  bool *save_manifest
+) {
   mutex_.AssertHeld();
 
   // Ignore error from CreateDir since the creation of the DB is
@@ -294,12 +308,14 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
       }
     } else {
       return Status::InvalidArgument(
-          dbname_, "does not exist (create_if_missing is false)");
+        dbname_,
+        "does not exist (create_if_missing is false)");
     }
   } else {
     if (options_.error_if_exists) {
       return Status::InvalidArgument(
-          dbname_, "exists (error_if_exists is true)");
+        dbname_,
+        "exists (error_if_exists is true)");
     }
   }
 
@@ -337,16 +353,23 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
   }
   if (!expected.empty()) {
     char buf[50];
-    snprintf(buf, sizeof(buf), "%d missing files; e.g.",
-             static_cast<int>(expected.size()));
+    snprintf(
+      buf,
+      sizeof(buf),
+      "%d missing files; e.g.",
+      static_cast<int>(expected.size()));
     return Status::Corruption(buf, TableFileName(dbname_, *(expected.begin())));
   }
 
   // Recover in the order in which the logs were generated
   std::sort(logs.begin(), logs.end());
   for (size_t i = 0; i < logs.size(); i++) {
-    s = RecoverLogFile(logs[i], (i == logs.size() - 1), save_manifest, edit,
-                       &max_sequence);
+    s = RecoverLogFile(
+      logs[i],
+      (i == logs.size() - 1),
+      save_manifest,
+      edit,
+      &max_sequence);
     if (!s.ok()) {
       return s;
     }
@@ -364,18 +387,25 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
   return Status::OK();
 }
 
-Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
-                              bool* save_manifest, VersionEdit* edit,
-                              SequenceNumber* max_sequence) {
-  struct LogReporter : public log::Reader::Reporter {
+Status DBImpl::RecoverLogFile(
+  uint64_t log_number,
+  bool last_log,
+  bool* save_manifest,
+  VersionEdit* edit,
+  SequenceNumber* max_sequence
+) {
+  struct LogReporter: public log::Reader::Reporter {
     Env* env;
     Logger* info_log;
     const char* fname;
     Status* status;  // NULL if options_.paranoid_checks==false
     virtual void Corruption(size_t bytes, const Status& s) {
-      Log(info_log, "%s%s: dropping %d bytes; %s",
-          (this->status == NULL ? "(ignoring error) " : ""),
-          fname, static_cast<int>(bytes), s.ToString().c_str());
+      Log(
+        info_log,
+        "%s%s: dropping %d bytes; %s",
+        (this->status == NULL ? "(ignoring error) " : ""),
+        fname,
+        static_cast<int>(bytes), s.ToString().c_str());
       if (this->status != NULL && this->status->ok()) *this->status = s;
     }
   };

@@ -30,8 +30,7 @@
 
 #include <algorithm>
 #include <assert.h>
-#include "leveldb/comparator.h"
-#include "leveldb/table_builder.h"
+#include "leveldb/leveldb_internal.h"
 #include "util/coding.h"
 
 namespace leveldb {

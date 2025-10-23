@@ -5,7 +5,7 @@
 #include "db/log_reader.h"
 
 #include <stdio.h>
-#include "leveldb/env.h"
+#include "leveldb/leveldb_internal.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
 

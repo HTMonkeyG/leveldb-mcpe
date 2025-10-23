@@ -5,8 +5,7 @@
 #ifndef STORAGE_LEVELDB_TABLE_ITERATOR_WRAPPER_H_
 #define STORAGE_LEVELDB_TABLE_ITERATOR_WRAPPER_H_
 
-#include "leveldb/iterator.h"
-#include "leveldb/slice.h"
+#include "leveldb/leveldb_internal.h"
 
 namespace leveldb {
 

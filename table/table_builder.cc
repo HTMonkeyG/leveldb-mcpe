@@ -2,19 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-#include "leveldb/table_builder.h"
+#include "leveldb/leveldb_internal.h"
 
 #include <assert.h>
-#include "leveldb/comparator.h"
-#include "leveldb/env.h"
-#include "leveldb/filter_policy.h"
-#include "leveldb/options.h"
+#include "leveldb/leveldb_internal.h"
 #include "table/block_builder.h"
 #include "table/filter_block.h"
 #include "table/format.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
-#include "leveldb/compressor.h"
+#include "leveldb/leveldb_internal.h"
 
 namespace leveldb {
 
@@ -28,7 +25,8 @@ struct TableBuilder::Rep {
   BlockBuilder index_block;
   std::string last_key;
   int64_t num_entries;
-  bool closed;          // Either Finish() or Abandon() has been called.
+  // Either Finish() or Abandon() has been called.
+  bool closed;
   FilterBlockBuilder* filter_block;
 
   // We do not emit the index entry for a block until we have seen the
@@ -41,28 +39,38 @@ struct TableBuilder::Rep {
   //
   // Invariant: r->pending_index_entry is true only if data_block is empty.
   bool pending_index_entry;
-  BlockHandle pending_handle;  // Handle to add to index block
+  // Handle to add to index block
+  BlockHandle pending_handle;
 
   std::string compressed_output;
 
-  Rep(const Options& opt, WritableFile* f)
-      : options(opt),
-        index_block_options(opt),
-        file(f),
-        offset(0),
-        data_block(&options),
-        index_block(&index_block_options),
-        num_entries(0),
-        closed(false),
-        filter_block(opt.filter_policy == NULL ? NULL
-                     : new FilterBlockBuilder(opt.filter_policy)),
-        pending_index_entry(false) {
+  Rep(
+    const Options& opt,
+    WritableFile* f
+  )
+    : options(opt)
+    , index_block_options(opt)
+    , file(f)
+    , offset(0)
+    , data_block(&options)
+    , index_block(&index_block_options)
+    , num_entries(0)
+    , closed(false)
+    , filter_block(opt.filter_policy == NULL
+      ? NULL
+      : new FilterBlockBuilder(opt.filter_policy))
+    , pending_index_entry(false)
+  {
     index_block_options.block_restart_interval = 1;
   }
 };
 
-TableBuilder::TableBuilder(const Options& options, WritableFile* file)
-    : rep_(new Rep(options, file)) {
+TableBuilder::TableBuilder(
+  const Options& options,
+  WritableFile* file
+)
+  : rep_(new Rep(options, file))
+{
   if (rep_->filter_block != NULL) {
     rep_->filter_block->StartBlock(0);
   }
@@ -74,7 +82,9 @@ TableBuilder::~TableBuilder() {
   delete rep_;
 }
 
-Status TableBuilder::ChangeOptions(const Options& options) {
+Status TableBuilder::ChangeOptions(
+  const Options& options
+) {
   // Note: if more fields are added to Options, update
   // this function to catch changes that should not be allowed to
   // change in the middle of building a Table.
@@ -90,7 +100,10 @@ Status TableBuilder::ChangeOptions(const Options& options) {
   return Status::OK();
 }
 
-void TableBuilder::Add(const Slice& key, const Slice& value) {
+void TableBuilder::Add(
+  const Slice& key,
+  const Slice& value
+) {
   Rep* r = rep_;
   assert(!r->closed);
   if (!ok()) return;
@@ -137,7 +150,10 @@ void TableBuilder::Flush() {
   }
 }
 
-void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
+void TableBuilder::WriteBlock(
+  BlockBuilder* block,
+  BlockHandle* handle
+) {
   // File format contains a sequence of blocks where each block has:
   //    block_data: uint8[n]
   //    type: uint8
@@ -151,19 +167,18 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
 
   // TODO(postrelease): Support more compression options: zlib?
   if (compressor) {
-     std::string& compressed = r->compressed_output;
+    std::string& compressed = r->compressed_output;
     compressor->compress(raw.data(), raw.size(), compressed);
 
-      if ( compressed.size() < raw.size() - (raw.size() / 8u)) {
-        block_contents = compressed;
-      } else {
-        // Snappy not supported, or compressed less than 12.5%, so just
-        // store uncompressed form
-        block_contents = raw;
-    compressor = nullptr;
-      }
-  }
-  else 
+    if ( compressed.size() < raw.size() - (raw.size() / 8u)) {
+      block_contents = compressed;
+    } else {
+      // Snappy not supported, or compressed less than 12.5%, so just
+      // store uncompressed form
+      block_contents = raw;
+      compressor = nullptr;
+    }
+  } else 
     block_contents = raw;
 
   WriteRawBlock(block_contents, compressor, handle);
@@ -171,18 +186,21 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
   block->Reset();
 }
 
-void TableBuilder::WriteRawBlock(const Slice& block_contents,
-                                 Compressor* compressor,
-                                 BlockHandle* handle) {
+void TableBuilder::WriteRawBlock(
+  const Slice& block_contents,
+  Compressor* compressor,
+  BlockHandle* handle
+) {
   Rep* r = rep_;
   handle->set_offset(r->offset);
   handle->set_size(block_contents.size());
   r->status = r->file->Append(block_contents);
   if (r->status.ok()) {
     char trailer[kBlockTrailerSize];
-  trailer[0] = compressor ? compressor->uniqueCompressionID : 0;
+    trailer[0] = compressor ? compressor->uniqueCompressionID : 0;
     uint32_t crc = crc32c::Value(block_contents.data(), block_contents.size());
-    crc = crc32c::Extend(crc, trailer, 1);  // Extend crc to cover block type
+    // Extend crc to cover block type
+    crc = crc32c::Extend(crc, trailer, 1);
     EncodeFixed32(trailer+1, crc32c::Mask(crc));
     r->status = r->file->Append(Slice(trailer, kBlockTrailerSize));
     if (r->status.ok()) {
@@ -205,8 +223,10 @@ Status TableBuilder::Finish() {
 
   // Write filter block
   if (ok() && r->filter_block != NULL) {
-    WriteRawBlock(r->filter_block->Finish(), nullptr,
-                  &filter_block_handle);
+    WriteRawBlock(
+      r->filter_block->Finish(),
+      nullptr,
+      &filter_block_handle);
   }
 
   // Write metaindex block
@@ -249,6 +269,7 @@ Status TableBuilder::Finish() {
       r->offset += footer_encoding.size();
     }
   }
+
   return r->status;
 }
 

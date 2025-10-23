@@ -15,7 +15,7 @@ shows how to open a database, creating it if necessary:
 
 ```c++
 #include <cassert>
-#include "leveldb/db.h"
+#include "leveldb/leveldb_internal.h"
 
 leveldb::DB* db;
 leveldb::Options options;
@@ -72,7 +72,7 @@ key1, the same value may be left stored under multiple keys. Such problems can
 be avoided by using the `WriteBatch` class to atomically apply a set of updates:
 
 ```c++
-#include "leveldb/write_batch.h"
+#include "leveldb/leveldb_internal.h"
 ...
 std::string value;
 leveldb::Status s = db->Get(leveldb::ReadOptions(), key1, &value);
@@ -342,7 +342,7 @@ each file stores a sequence of compressed blocks. If options.cache is non-NULL,
 it is used to cache frequently used uncompressed block contents.
 
 ```c++
-#include "leveldb/cache.h"
+#include "leveldb/leveldb_internal.h"
 
 leveldb::Options options;
 options.cache = leveldb::NewLRUCache(100 * 1048576);  // 100MB cache

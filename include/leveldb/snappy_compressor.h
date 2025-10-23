@@ -1,24 +1,30 @@
 #pragma once
 
-#include "leveldb/dbconfig.h"
-#include "leveldb/compressor.h"
+#include "leveldb/leveldb_internal.h"
 
 namespace leveldb {
-  class DLLX SnappyCompressor : public Compressor 
-  {
-  public:
 
-    static const char SERIALIZE_ID = 1;
-        
-        virtual ~SnappyCompressor() {}
+class DLLX SnappyCompressor : public Compressor  {
+public:
 
-    SnappyCompressor() :
-      Compressor(SERIALIZE_ID) {
+  static const char SERIALIZE_ID = 1;
+      
+  virtual ~SnappyCompressor() { }
 
-    }
+  SnappyCompressor()
+    : Compressor(SERIALIZE_ID) { }
 
-    virtual void compressImpl(const char* input, size_t length, ::std::string& output) const override;
+  virtual void compressImpl(
+    const char* input,
+    size_t length,
+    std::string& output
+  ) const override;
 
-    virtual bool decompress(const char* input, size_t length, ::std::string& output) const override;
-  };
+  virtual bool decompress(
+    const char* input,
+    size_t length,
+    std::string& output
+  ) const override;
+};
+
 }

@@ -8,8 +8,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "leveldb/env.h"
-#include "leveldb/slice.h"
+#include "leveldb/leveldb_internal.h"
 
 namespace leveldb {
 

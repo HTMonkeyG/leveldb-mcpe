@@ -3,20 +3,12 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include "leveldb/c.h"
+#include "leveldb/leveldb_internal.h"
 
 #include <stdlib.h>
 #ifndef _WIN32
 #include <unistd.h>
 #endif
-#include "leveldb/cache.h"
-#include "leveldb/comparator.h"
-#include "leveldb/db.h"
-#include "leveldb/env.h"
-#include "leveldb/filter_policy.h"
-#include "leveldb/iterator.h"
-#include "leveldb/options.h"
-#include "leveldb/status.h"
-#include "leveldb/write_batch.h"
 #include "leveldb/zlib_compressor.h"
 #ifdef SNAPPY
 #include "leveldb/snappy_compressor.h"

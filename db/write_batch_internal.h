@@ -6,7 +6,7 @@
 #define STORAGE_LEVELDB_DB_WRITE_BATCH_INTERNAL_H_
 
 #include "db/dbformat.h"
-#include "leveldb/write_batch.h"
+#include "leveldb/leveldb_internal.h"
 
 namespace leveldb {
 

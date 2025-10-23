@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include "db/filename.h"
 #include "db/dbformat.h"
-#include "leveldb/env.h"
+#include "leveldb/leveldb_internal.h"
 #include "util/logging.h"
 
 namespace leveldb {

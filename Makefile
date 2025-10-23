@@ -9,7 +9,7 @@ CC = gcc
 
 SRC_DIRS = $(SRC_DIR) $(wildcard $(SRC_DIR)/*/)
 
-CFLAGS = -O3 -std=c++11 -g -Wall -Wformat -I. -I./include -DDLLX=__declspec(dllexport) -DWIN32 -DLEVELDB_PLATFORM_WINDOWS
+CFLAGS = -O3 -std=c++11 -g -Wall -Wformat -I. -I./include -DWIN32 -DDLLX= -DLEVELDB_PLATFORM_WINDOWS -fno-rtti
 CFLAGS += -Wno-unused-variable -Wno-attributes -Wno-sign-compare
 
 CPP_SRC = db/builder.cc db/c.cc db/db_impl.cc db/db_iter.cc db/dbformat.cc db/filename.cc db/log_reader.cc db/log_writer.cc db/memtable.cc db/repair.cc db/table_cache.cc db/version_edit.cc db/version_set.cc db/write_batch.cc db/zlib_compressor.cc
@@ -30,7 +30,7 @@ $(BIN_TARGET): $(CPP_OBJ)
 
 $(DIST_DIR)/%.o: %.cc
 	@echo Compiling file "$<" ...
-	@$(CXX) $(CFLAGS) -c $< -o $@
+	@$(CXX) $(CFLAGS) -c $< -o $@ -fvisibility=hidden
 
 clean:
 	-@del dist\*.a

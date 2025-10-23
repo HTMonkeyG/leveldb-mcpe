@@ -8,8 +8,7 @@
 #include <stdint.h>
 
 #include "db/log_format.h"
-#include "leveldb/slice.h"
-#include "leveldb/status.h"
+#include "leveldb/leveldb_internal.h"
 
 namespace leveldb {
 
