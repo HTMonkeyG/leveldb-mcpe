@@ -3,14 +3,14 @@ MAKEFLAGS += -s -j
 DIST_DIR = ./dist
 SRC_DIR = .
 
+AR = ar
 CXX = g++
 CC = gcc
 
 SRC_DIRS = $(SRC_DIR) $(wildcard $(SRC_DIR)/*/)
 
-CFLAGS = -O3 -std=c++11 -g -Wall -Wformat -flto=auto -I. -I./include -DDLLX=__declspec(dllexport) -DWIN32 -DLEVELDB_PLATFORM_WINDOWS
+CFLAGS = -O3 -std=c++11 -g -Wall -Wformat -I. -I./include -DDLLX=__declspec(dllexport) -DWIN32 -DLEVELDB_PLATFORM_WINDOWS
 CFLAGS += -Wno-unused-variable -Wno-attributes -Wno-sign-compare
-LFLAGS = -L. -lz
 
 CPP_SRC = db/builder.cc db/c.cc db/db_impl.cc db/db_iter.cc db/dbformat.cc db/filename.cc db/log_reader.cc db/log_writer.cc db/memtable.cc db/repair.cc db/table_cache.cc db/version_edit.cc db/version_set.cc db/write_batch.cc db/zlib_compressor.cc
 CPP_SRC += table/block.cc table/block_builder.cc table/filter_block.cc table/format.cc table/iterator.cc table/merger.cc table/table.cc table/table_builder.cc table/two_level_iterator.cc
@@ -24,9 +24,8 @@ BIN_TARGET = $(DIST_DIR)/$(TARGET)
 vpath %.cc $(SRC_DIRS)
 
 $(BIN_TARGET): $(CPP_OBJ)
-	@echo $(CPP_OBJ)
 	@echo Linking ...
-	@$(CXX) --std=c++11 $(CFLAGS) $^ -shared -o $@ $(LFLAGS)
+	@$(AR) rcs $@ $^
 	@echo Done.
 
 $(DIST_DIR)/%.o: %.cc
