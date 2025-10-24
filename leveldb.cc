@@ -8,8 +8,8 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <vector>
+#include "leveldb.h"
 #include "leveldb_internal.h"
-#include "leveldb_db.h"
 #include "port/port.h"
 
 namespace leveldb {
@@ -19,12 +19,12 @@ namespace leveldb {
 // ----------------------------------------------------------------------------
 
 Status BuildTable(
-  const std::string& dbname,
-  Env* env,
-  const Options& options,
-  TableCache* table_cache,
-  Iterator* iter,
-  FileMetaData* meta
+  const std::string &dbname,
+  Env *env,
+  const Options &options,
+  TableCache *table_cache,
+  Iterator *iter,
+  FileMetaData *meta
 ) {
   Status s;
   meta->file_size = 0;
@@ -32,13 +32,13 @@ Status BuildTable(
 
   std::string fname = TableFileName(dbname, meta->number);
   if (iter->Valid()) {
-    WritableFile* file;
+    WritableFile *file;
     s = env->NewWritableFile(fname, &file);
     if (!s.ok()) {
       return s;
     }
 
-    TableBuilder* builder = new TableBuilder(options, file);
+    TableBuilder *builder = new TableBuilder(options, file);
     meta->smallest.DecodeFrom(iter->key());
     for (; iter->Valid(); iter->Next()) {
       Slice key = iter->key();
@@ -70,7 +70,7 @@ Status BuildTable(
 
     if (s.ok()) {
       // Verify that the table is usable
-      Iterator* it = table_cache->NewIterator(
+      Iterator *it = table_cache->NewIterator(
         ReadOptions(),
         meta->number,
         meta->file_size);
@@ -101,16 +101,16 @@ const int kNumNonTableCacheFiles = 10;
 // Information kept for every waiting writer
 struct DBImpl::Writer {
   Status status;
-  WriteBatch* batch;
+  WriteBatch *batch;
   bool sync;
   bool done;
   port::CondVar cv;
 
-  explicit Writer(port::Mutex* mu) : cv(mu) { }
+  explicit Writer(port::Mutex *mu): cv(mu) {}
 };
 
 struct DBImpl::CompactionState {
-  Compaction* const compaction;
+  Compaction *const compaction;
 
   // Sequence numbers < smallest_snapshot are not significant since we
   // will never have to service a snapshot below smallest_snapshot.
@@ -127,40 +127,42 @@ struct DBImpl::CompactionState {
   std::vector<Output> outputs;
 
   // State kept for output being generated
-  WritableFile* outfile;
-  TableBuilder* builder;
+  WritableFile *outfile;
+  TableBuilder *builder;
 
   uint64_t total_bytes;
 
-  Output* current_output() { return &outputs[outputs.size()-1]; }
+  Output *current_output() {
+    return &outputs[outputs.size() - 1];
+  }
 
-  explicit CompactionState(Compaction* c)
+  explicit CompactionState(Compaction *c)
     : compaction(c)
     , outfile(NULL)
     , builder(NULL)
-    , total_bytes(0) { }
+    , total_bytes(0) {}
 };
 
 // Fix user-supplied options to be reasonable
-template <class T,class V>
-static void ClipToRange(T* ptr, V minvalue, V maxvalue) {
+template <class T, class V>
+static void ClipToRange(T *ptr, V minvalue, V maxvalue) {
   if (static_cast<V>(*ptr) > maxvalue) *ptr = maxvalue;
   if (static_cast<V>(*ptr) < minvalue) *ptr = minvalue;
 }
 
 Options SanitizeOptions(
-  const std::string& dbname,
-  const InternalKeyComparator* icmp,
-  const InternalFilterPolicy* ipolicy,
-  const Options& src
+  const std::string &dbname,
+  const InternalKeyComparator *icmp,
+  const InternalFilterPolicy *ipolicy,
+  const Options &src
 ) {
   Options result = src;
   result.comparator = icmp;
   result.filter_policy = (src.filter_policy != NULL) ? ipolicy : NULL;
-  ClipToRange(&result.max_open_files,    64 + kNumNonTableCacheFiles, 50000);
-  ClipToRange(&result.write_buffer_size, 64<<10,                      1<<30);
-  ClipToRange(&result.max_file_size,     1<<20,                       1<<30);
-  ClipToRange(&result.block_size,        1<<10,                       4<<20);
+  ClipToRange(&result.max_open_files, 64 + kNumNonTableCacheFiles, 50000);
+  ClipToRange(&result.write_buffer_size, 64 << 10, 1 << 30);
+  ClipToRange(&result.max_file_size, 1 << 20, 1 << 30);
+  ClipToRange(&result.block_size, 1 << 10, 4 << 20);
   if (result.info_log == NULL) {
     // Open a log file in the same directory as the db
     src.env->CreateDir(dbname);  // In case it does not exist
@@ -178,14 +180,14 @@ Options SanitizeOptions(
 }
 
 DBImpl::DBImpl(
-  const Options& raw_options,
-  const std::string& dbname
+  const Options &raw_options,
+  const std::string &dbname
 )
   : env_(raw_options.env)
   , internal_comparator_(raw_options.comparator)
   , internal_filter_policy_(raw_options.filter_policy)
   , options_(SanitizeOptions(dbname, &internal_comparator_,
-      &internal_filter_policy_, raw_options))
+    &internal_filter_policy_, raw_options))
   , owns_info_log_(options_.info_log != raw_options.info_log)
   , owns_cache_(options_.block_cache != raw_options.block_cache)
   , dbname_(dbname)
@@ -201,15 +203,14 @@ DBImpl::DBImpl(
   , tmp_batch_(new WriteBatch)
   , bg_compaction_scheduled_(false)
   , suspending_compaction_(NULL)
-  , manual_compaction_(NULL)
-{
+  , manual_compaction_(NULL) {
   has_imm_.Release_Store(NULL);
 
   // Reserve ten files or so for other uses and give the rest to TableCache.
   const int table_cache_size = options_.max_open_files - kNumNonTableCacheFiles;
   table_cache_ = new TableCache(
     dbname_,
-    &options_, 
+    &options_,
     table_cache_size);
 
   versions_ = new VersionSet(
@@ -257,7 +258,7 @@ Status DBImpl::NewDB() {
   new_db.SetLastSequence(0);
 
   const std::string manifest = DescriptorFileName(dbname_, 1);
-  WritableFile* file;
+  WritableFile *file;
   Status s = env_->NewWritableFile(manifest, &file);
   if (!s.ok()) {
     return s;
@@ -282,7 +283,7 @@ Status DBImpl::NewDB() {
 }
 
 void DBImpl::MaybeIgnoreError(
-  Status* s
+  Status *s
 ) const {
   if (s->ok() || options_.paranoid_checks) {
     // No change needed
@@ -351,7 +352,7 @@ void DBImpl::DeleteObsoleteFiles() {
 }
 
 Status DBImpl::Recover(
-  VersionEdit* edit,
+  VersionEdit *edit,
   bool *save_manifest
 ) {
   mutex_.AssertHeld();
@@ -456,16 +457,16 @@ Status DBImpl::Recover(
 Status DBImpl::RecoverLogFile(
   uint64_t log_number,
   bool last_log,
-  bool* save_manifest,
-  VersionEdit* edit,
-  SequenceNumber* max_sequence
+  bool *save_manifest,
+  VersionEdit *edit,
+  SequenceNumber *max_sequence
 ) {
   struct LogReporter: public log::Reader::Reporter {
-    Env* env;
-    Logger* info_log;
-    const char* fname;
-    Status* status;  // NULL if options_.paranoid_checks==false
-    virtual void Corruption(size_t bytes, const Status& s) {
+    Env *env;
+    Logger *info_log;
+    const char *fname;
+    Status *status;  // NULL if options_.paranoid_checks==false
+    virtual void Corruption(size_t bytes, const Status &s) {
       Log(
         info_log,
         "%s%s: dropping %d bytes; %s",
@@ -480,7 +481,7 @@ Status DBImpl::RecoverLogFile(
 
   // Open the log file
   std::string fname = LogFileName(dbname_, log_number);
-  SequentialFile* file;
+  SequentialFile *file;
   Status status = env_->NewSequentialFile(fname, &file);
   if (!status.ok()) {
     MaybeIgnoreError(&status);
@@ -498,21 +499,21 @@ Status DBImpl::RecoverLogFile(
   // to be skipped instead of propagating bad information (like overly
   // large sequence numbers).
   log::Reader reader(file, &reporter, true/*checksum*/,
-                     0/*initial_offset*/);
+    0/*initial_offset*/);
   Log(options_.info_log, "Recovering log #%llu",
-      (unsigned long long) log_number);
+    (unsigned long long) log_number);
 
   // Read all the records and add to a memtable
   std::string scratch;
   Slice record;
   WriteBatch batch;
   int compactions = 0;
-  MemTable* mem = NULL;
+  MemTable *mem = NULL;
   while (reader.ReadRecord(&record, &scratch) &&
-         status.ok()) {
+    status.ok()) {
     if (record.size() < 12) {
       reporter.Corruption(
-          record.size(), Status::Corruption("log record too small"));
+        record.size(), Status::Corruption("log record too small"));
       continue;
     }
     WriteBatchInternal::SetContents(&batch, record);
@@ -527,8 +528,8 @@ Status DBImpl::RecoverLogFile(
       break;
     }
     const SequenceNumber last_seq =
-        WriteBatchInternal::Sequence(&batch) +
-        WriteBatchInternal::Count(&batch) - 1;
+      WriteBatchInternal::Sequence(&batch) +
+      WriteBatchInternal::Count(&batch) - 1;
     if (last_seq > *max_sequence) {
       *max_sequence = last_seq;
     }
@@ -556,7 +557,7 @@ Status DBImpl::RecoverLogFile(
     assert(mem_ == NULL);
     uint64_t lfile_size;
     if (env_->GetFileSize(fname, &lfile_size).ok() &&
-        env_->NewAppendableFile(fname, &logfile_).ok()) {
+      env_->NewAppendableFile(fname, &logfile_).ok()) {
       Log(options_.info_log, "Reusing old log %s \n", fname.c_str());
       log_ = new log::Writer(logfile_, lfile_size);
       logfile_number_ = log_number;
@@ -583,16 +584,16 @@ Status DBImpl::RecoverLogFile(
   return status;
 }
 
-Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
-                                Version* base) {
+Status DBImpl::WriteLevel0Table(MemTable *mem, VersionEdit *edit,
+  Version *base) {
   mutex_.AssertHeld();
   const uint64_t start_micros = env_->NowMicros();
   FileMetaData meta;
   meta.number = versions_->NewFileNumber();
   pending_outputs_.insert(meta.number);
-  Iterator* iter = mem->NewIterator();
+  Iterator *iter = mem->NewIterator();
   Log(options_.info_log, "Level-0 table #%llu: started",
-      (unsigned long long) meta.number);
+    (unsigned long long) meta.number);
 
   Status s;
   {
@@ -602,9 +603,9 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   }
 
   Log(options_.info_log, "Level-0 table #%llu: %lld bytes %s",
-      (unsigned long long) meta.number,
-      (unsigned long long) meta.file_size,
-      s.ToString().c_str());
+    (unsigned long long) meta.number,
+    (unsigned long long) meta.file_size,
+    s.ToString().c_str());
   delete iter;
   pending_outputs_.erase(meta.number);
 
@@ -619,7 +620,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
       level = base->PickLevelForMemTableOutput(min_user_key, max_user_key);
     }
     edit->AddFile(level, meta.number, meta.file_size,
-                  meta.smallest, meta.largest);
+      meta.smallest, meta.largest);
   }
 
   CompactionStats stats;
@@ -635,7 +636,7 @@ void DBImpl::CompactMemTable() {
 
   // Save the contents of the memtable as a new Table
   VersionEdit edit;
-  Version* base = versions_->current();
+  Version *base = versions_->current();
   base->Ref();
   Status s = WriteLevel0Table(imm_, &edit, base);
   base->Unref();
@@ -662,11 +663,11 @@ void DBImpl::CompactMemTable() {
   }
 }
 
-void DBImpl::CompactRange(const Slice* begin, const Slice* end) {
+void DBImpl::CompactRange(const Slice *begin, const Slice *end) {
   int max_level_with_files = 1;
   {
     MutexLock l(&mutex_);
-    Version* base = versions_->current();
+    Version *base = versions_->current();
     for (int level = 1; level < config::kNumLevels; level++) {
       if (base->OverlapInLevel(level, begin, end)) {
         max_level_with_files = level;
@@ -679,7 +680,7 @@ void DBImpl::CompactRange(const Slice* begin, const Slice* end) {
   }
 }
 
-void DBImpl::TEST_CompactRange(int level, const Slice* begin,const Slice* end) {
+void DBImpl::TEST_CompactRange(int level, const Slice *begin, const Slice *end) {
   assert(level >= 0);
   assert(level + 1 < config::kNumLevels);
 
@@ -732,7 +733,7 @@ Status DBImpl::TEST_CompactMemTable() {
   return s;
 }
 
-void DBImpl::RecordBackgroundError(const Status& s) {
+void DBImpl::RecordBackgroundError(const Status &s) {
   mutex_.AssertHeld();
   if (bg_error_.ok()) {
     bg_error_ = s;
@@ -747,12 +748,12 @@ void DBImpl::MaybeScheduleCompaction() {
   } else if (shutting_down_.Acquire_Load()) {
     // DB is being deleted; no more background compactions
   } else if (imm_ == NULL && suspending_compaction_.Acquire_Load()) {
-  // DB is being suspended; no more background compactions
+    // DB is being suspended; no more background compactions
   } else if (!bg_error_.ok()) {
     // Already got an error; no more changes
   } else if (imm_ == NULL &&
-             manual_compaction_ == NULL &&
-             !versions_->NeedsCompaction()) {
+    manual_compaction_ == NULL &&
+    !versions_->NeedsCompaction()) {
     // No work to be done
   } else {
     bg_compaction_scheduled_ = true;
@@ -762,7 +763,7 @@ void DBImpl::MaybeScheduleCompaction() {
 
 void DBImpl::SuspendCompaction() {
   // set suspend flag and wait for any currently executing bg tasks to complete
-    Log(options_.info_log, "BG suspend compaction\n");
+  Log(options_.info_log, "BG suspend compaction\n");
   mutex_.Lock();
   suspending_compaction_.Release_Store(this);  // Any non-NULL value is ok
   mutex_.Unlock();
@@ -770,15 +771,15 @@ void DBImpl::SuspendCompaction() {
 }
 
 void DBImpl::ResumeCompaction() {
-    Log(options_.info_log, "BG resume compaction\n");
-    mutex_.Lock();
+  Log(options_.info_log, "BG resume compaction\n");
+  mutex_.Lock();
   suspending_compaction_.Release_Store(nullptr);
   mutex_.Unlock();
   Log(options_.info_log, "db BG resumed\n");
 }
 
-void DBImpl::BGWork(void* db) {
-  reinterpret_cast<DBImpl*>(db)->BackgroundCall();
+void DBImpl::BGWork(void *db) {
+  reinterpret_cast<DBImpl *>(db)->BackgroundCall();
 }
 
 void DBImpl::BackgroundCall() {
@@ -796,8 +797,8 @@ void DBImpl::BackgroundCall() {
 
   // Previous compaction may have produced too many files in a level,
   // so reschedule another compaction if needed.
-  if(!suspending_compaction_.Acquire_Load()) {
-      MaybeScheduleCompaction();
+  if (!suspending_compaction_.Acquire_Load()) {
+    MaybeScheduleCompaction();
   }
   bg_cv_.SignalAll();
 }
@@ -810,22 +811,22 @@ void DBImpl::BackgroundCompaction() {
     return;
   }
 
-  Compaction* c;
+  Compaction *c;
   bool is_manual = (manual_compaction_ != NULL);
   InternalKey manual_end;
   if (is_manual) {
-    ManualCompaction* m = manual_compaction_;
+    ManualCompaction *m = manual_compaction_;
     c = versions_->CompactRange(m->level, m->begin, m->end);
     m->done = (c == NULL);
     if (c != NULL) {
       manual_end = c->input(0, c->num_input_files(0) - 1)->largest;
     }
     Log(options_.info_log,
-        "Manual compaction at level-%d from %s .. %s; will stop at %s\n",
-        m->level,
-        (m->begin ? m->begin->DebugString().c_str() : "(begin)"),
-        (m->end ? m->end->DebugString().c_str() : "(end)"),
-        (m->done ? "(end)" : manual_end.DebugString().c_str()));
+      "Manual compaction at level-%d from %s .. %s; will stop at %s\n",
+      m->level,
+      (m->begin ? m->begin->DebugString().c_str() : "(begin)"),
+      (m->end ? m->end->DebugString().c_str() : "(end)"),
+      (m->done ? "(end)" : manual_end.DebugString().c_str()));
   } else {
     c = versions_->PickCompaction();
   }
@@ -836,23 +837,23 @@ void DBImpl::BackgroundCompaction() {
   } else if (!is_manual && c->IsTrivialMove()) {
     // Move file to next level
     assert(c->num_input_files(0) == 1);
-    FileMetaData* f = c->input(0, 0);
+    FileMetaData *f = c->input(0, 0);
     c->edit()->DeleteFile(c->level(), f->number);
     c->edit()->AddFile(c->level() + 1, f->number, f->file_size,
-                       f->smallest, f->largest);
+      f->smallest, f->largest);
     status = versions_->LogAndApply(c->edit(), &mutex_);
     if (!status.ok()) {
       RecordBackgroundError(status);
     }
     VersionSet::LevelSummaryStorage tmp;
     Log(options_.info_log, "Moved #%lld to level-%d %lld bytes %s: %s\n",
-        static_cast<unsigned long long>(f->number),
-        c->level() + 1,
-        static_cast<unsigned long long>(f->file_size),
-        status.ToString().c_str(),
-        versions_->LevelSummary(&tmp));
+      static_cast<unsigned long long>(f->number),
+      c->level() + 1,
+      static_cast<unsigned long long>(f->file_size),
+      status.ToString().c_str(),
+      versions_->LevelSummary(&tmp));
   } else {
-    CompactionState* compact = new CompactionState(c);
+    CompactionState *compact = new CompactionState(c);
     status = DoCompactionWork(compact);
     if (!status.ok()) {
       RecordBackgroundError(status);
@@ -871,11 +872,11 @@ void DBImpl::BackgroundCompaction() {
     // Ignore compaction errors found during suspend
   } else {
     Log(options_.info_log,
-        "Compaction error: %s", status.ToString().c_str());
+      "Compaction error: %s", status.ToString().c_str());
   }
 
   if (is_manual) {
-    ManualCompaction* m = manual_compaction_;
+    ManualCompaction *m = manual_compaction_;
     if (!status.ok()) {
       m->done = true;
     }
@@ -889,7 +890,7 @@ void DBImpl::BackgroundCompaction() {
   }
 }
 
-void DBImpl::CleanupCompaction(CompactionState* compact) {
+void DBImpl::CleanupCompaction(CompactionState *compact) {
   mutex_.AssertHeld();
   if (compact->builder != NULL) {
     // May happen if we get a shutdown call in the middle of compaction
@@ -900,13 +901,13 @@ void DBImpl::CleanupCompaction(CompactionState* compact) {
   }
   delete compact->outfile;
   for (size_t i = 0; i < compact->outputs.size(); i++) {
-    const CompactionState::Output& out = compact->outputs[i];
+    const CompactionState::Output &out = compact->outputs[i];
     pending_outputs_.erase(out.number);
   }
   delete compact;
 }
 
-Status DBImpl::OpenCompactionOutputFile(CompactionState* compact) {
+Status DBImpl::OpenCompactionOutputFile(CompactionState *compact) {
   assert(compact != NULL);
   assert(compact->builder == NULL);
   uint64_t file_number;
@@ -931,8 +932,8 @@ Status DBImpl::OpenCompactionOutputFile(CompactionState* compact) {
   return s;
 }
 
-Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
-                                          Iterator* input) {
+Status DBImpl::FinishCompactionOutputFile(CompactionState *compact,
+  Iterator *input) {
   assert(compact != NULL);
   assert(compact->outfile != NULL);
   assert(compact->builder != NULL);
@@ -966,54 +967,54 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
 
   if (s.ok() && current_entries > 0) {
     // Verify that the table is usable
-    Iterator* iter = table_cache_->NewIterator(ReadOptions(),
-                                               output_number,
-                                               current_bytes);
+    Iterator *iter = table_cache_->NewIterator(ReadOptions(),
+      output_number,
+      current_bytes);
     s = iter->status();
     delete iter;
     if (s.ok()) {
       Log(options_.info_log,
-          "Generated table #%llu@%d: %lld keys, %lld bytes",
-          (unsigned long long) output_number,
-          compact->compaction->level(),
-          (unsigned long long) current_entries,
-          (unsigned long long) current_bytes);
+        "Generated table #%llu@%d: %lld keys, %lld bytes",
+        (unsigned long long) output_number,
+        compact->compaction->level(),
+        (unsigned long long) current_entries,
+        (unsigned long long) current_bytes);
     }
   }
   return s;
 }
 
 
-Status DBImpl::InstallCompactionResults(CompactionState* compact) {
+Status DBImpl::InstallCompactionResults(CompactionState *compact) {
   mutex_.AssertHeld();
-  Log(options_.info_log,  "Compacted %d@%d + %d@%d files => %lld bytes",
-      compact->compaction->num_input_files(0),
-      compact->compaction->level(),
-      compact->compaction->num_input_files(1),
-      compact->compaction->level() + 1,
-      static_cast<long long>(compact->total_bytes));
+  Log(options_.info_log, "Compacted %d@%d + %d@%d files => %lld bytes",
+    compact->compaction->num_input_files(0),
+    compact->compaction->level(),
+    compact->compaction->num_input_files(1),
+    compact->compaction->level() + 1,
+    static_cast<long long>(compact->total_bytes));
 
   // Add compaction outputs
   compact->compaction->AddInputDeletions(compact->compaction->edit());
   const int level = compact->compaction->level();
   for (size_t i = 0; i < compact->outputs.size(); i++) {
-    const CompactionState::Output& out = compact->outputs[i];
+    const CompactionState::Output &out = compact->outputs[i];
     compact->compaction->edit()->AddFile(
-        level + 1,
-        out.number, out.file_size, out.smallest, out.largest);
+      level + 1,
+      out.number, out.file_size, out.smallest, out.largest);
   }
   return versions_->LogAndApply(compact->compaction->edit(), &mutex_);
 }
 
-Status DBImpl::DoCompactionWork(CompactionState* compact) {
+Status DBImpl::DoCompactionWork(CompactionState *compact) {
   const uint64_t start_micros = env_->NowMicros();
   int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
 
-  Log(options_.info_log,  "Compacting %d@%d + %d@%d files",
-      compact->compaction->num_input_files(0),
-      compact->compaction->level(),
-      compact->compaction->num_input_files(1),
-      compact->compaction->level() + 1);
+  Log(options_.info_log, "Compacting %d@%d + %d@%d files",
+    compact->compaction->num_input_files(0),
+    compact->compaction->level(),
+    compact->compaction->num_input_files(1),
+    compact->compaction->level() + 1);
 
   assert(versions_->NumLevelFiles(compact->compaction->level()) > 0);
   assert(compact->builder == NULL);
@@ -1027,7 +1028,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   // Release mutex while we're actually doing the compaction work
   mutex_.Unlock();
 
-  Iterator* input = versions_->MakeInputIterator(compact->compaction);
+  Iterator *input = versions_->MakeInputIterator(compact->compaction);
   input->SeekToFirst();
   Status status;
   ParsedInternalKey ikey;
@@ -1049,7 +1050,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
     Slice key = input->key();
     if (compact->compaction->ShouldStopBefore(key) &&
-        compact->builder != NULL) {
+      compact->builder != NULL) {
       status = FinishCompactionOutputFile(compact, input);
       if (!status.ok()) {
         break;
@@ -1065,8 +1066,8 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       last_sequence_for_key = kMaxSequenceNumber;
     } else {
       if (!has_current_user_key ||
-          user_comparator()->Compare(ikey.user_key,
-                                     Slice(current_user_key)) != 0) {
+        user_comparator()->Compare(ikey.user_key,
+          Slice(current_user_key)) != 0) {
         // First occurrence of this user key
         current_user_key.assign(ikey.user_key.data(), ikey.user_key.size());
         has_current_user_key = true;
@@ -1077,8 +1078,8 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         // Hidden by an newer entry for same user key
         drop = true;    // (A)
       } else if (ikey.type == kTypeDeletion &&
-                 ikey.sequence <= compact->smallest_snapshot &&
-                 compact->compaction->IsBaseLevelForKey(ikey.user_key)) {
+        ikey.sequence <= compact->smallest_snapshot &&
+        compact->compaction->IsBaseLevelForKey(ikey.user_key)) {
         // For this user key:
         // (1) there is no data in higher levels
         // (2) data in lower levels will have larger sequence numbers
@@ -1093,12 +1094,12 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
     }
 #if 0
     Log(options_.info_log,
-        "  Compact: %s, seq %d, type: %d %d, drop: %d, is_base: %d, "
-        "%d smallest_snapshot: %d",
-        ikey.user_key.ToString().c_str(),
-        (int)ikey.sequence, ikey.type, kTypeValue, drop,
-        compact->compaction->IsBaseLevelForKey(ikey.user_key),
-        (int)last_sequence_for_key, (int)compact->smallest_snapshot);
+      "  Compact: %s, seq %d, type: %d %d, drop: %d, is_base: %d, "
+      "%d smallest_snapshot: %d",
+      ikey.user_key.ToString().c_str(),
+      (int)ikey.sequence, ikey.type, kTypeValue, drop,
+      compact->compaction->IsBaseLevelForKey(ikey.user_key),
+      (int)last_sequence_for_key, (int)compact->smallest_snapshot);
 #endif
 
     if (!drop) {
@@ -1117,7 +1118,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
       // Close output file if it is big enough
       if (compact->builder->FileSize() >=
-          compact->compaction->MaxOutputFileSize()) {
+        compact->compaction->MaxOutputFileSize()) {
         status = FinishCompactionOutputFile(compact, input);
         if (!status.ok()) {
           break;
@@ -1162,20 +1163,20 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   }
   VersionSet::LevelSummaryStorage tmp;
   Log(options_.info_log,
-      "compacted to: %s", versions_->LevelSummary(&tmp));
+    "compacted to: %s", versions_->LevelSummary(&tmp));
   return status;
 }
 
 namespace {
 struct IterState {
-  port::Mutex* mu;
-  Version* version;
-  MemTable* mem;
-  MemTable* imm;
+  port::Mutex *mu;
+  Version *version;
+  MemTable *mem;
+  MemTable *imm;
 };
 
-static void CleanupIteratorState(void* arg1, void* arg2) {
-  IterState* state = reinterpret_cast<IterState*>(arg1);
+static void CleanupIteratorState(void *arg1, void *arg2) {
+  IterState *state = reinterpret_cast<IterState *>(arg1);
   state->mu->Lock();
   state->mem->Unref();
   if (state->imm != NULL) state->imm->Unref();
@@ -1185,15 +1186,15 @@ static void CleanupIteratorState(void* arg1, void* arg2) {
 }
 }  // namespace
 
-Iterator* DBImpl::NewInternalIterator(const ReadOptions& options,
-                                      SequenceNumber* latest_snapshot,
-                                      uint32_t* seed) {
-  IterState* cleanup = new IterState;
+Iterator *DBImpl::NewInternalIterator(const ReadOptions &options,
+  SequenceNumber *latest_snapshot,
+  uint32_t *seed) {
+  IterState *cleanup = new IterState;
   mutex_.Lock();
   *latest_snapshot = versions_->LastSequence();
 
   // Collect together all needed child iterators
-  std::vector<Iterator*> list;
+  std::vector<Iterator *> list;
   list.push_back(mem_->NewIterator());
   mem_->Ref();
   if (imm_ != NULL) {
@@ -1201,8 +1202,8 @@ Iterator* DBImpl::NewInternalIterator(const ReadOptions& options,
     imm_->Ref();
   }
   versions_->current()->AddIterators(options, &list);
-  Iterator* internal_iter =
-      NewMergingIterator(&internal_comparator_, &list[0], (uint32_t)list.size());
+  Iterator *internal_iter =
+    NewMergingIterator(&internal_comparator_, &list[0], (uint32_t)list.size());
   versions_->current()->Ref();
 
   cleanup->mu = &mutex_;
@@ -1216,7 +1217,7 @@ Iterator* DBImpl::NewInternalIterator(const ReadOptions& options,
   return internal_iter;
 }
 
-Iterator* DBImpl::TEST_NewInternalIterator() {
+Iterator *DBImpl::TEST_NewInternalIterator() {
   SequenceNumber ignored;
   uint32_t ignored_seed;
   return NewInternalIterator(ReadOptions(), &ignored, &ignored_seed);
@@ -1227,21 +1228,21 @@ int64_t DBImpl::TEST_MaxNextLevelOverlappingBytes() {
   return versions_->MaxNextLevelOverlappingBytes();
 }
 
-Status DBImpl::Get(const ReadOptions& options,
-                   const Slice& key,
-                   std::string* value) {
+Status DBImpl::Get(const ReadOptions &options,
+  const Slice &key,
+  std::string *value) {
   Status s;
   MutexLock l(&mutex_);
   SequenceNumber snapshot;
   if (options.snapshot != NULL) {
-    snapshot = reinterpret_cast<const SnapshotImpl*>(options.snapshot)->number_;
+    snapshot = reinterpret_cast<const SnapshotImpl *>(options.snapshot)->number_;
   } else {
     snapshot = versions_->LastSequence();
   }
 
-  MemTable* mem = mem_;
-  MemTable* imm = imm_;
-  Version* current = versions_->current();
+  MemTable *mem = mem_;
+  MemTable *imm = imm_;
+  Version *current = versions_->current();
   mem->Ref();
   if (imm != NULL) imm->Ref();
   current->Ref();
@@ -1274,16 +1275,16 @@ Status DBImpl::Get(const ReadOptions& options,
   return s;
 }
 
-Iterator* DBImpl::NewIterator(const ReadOptions& options) {
+Iterator *DBImpl::NewIterator(const ReadOptions &options) {
   SequenceNumber latest_snapshot;
   uint32_t seed;
-  Iterator* iter = NewInternalIterator(options, &latest_snapshot, &seed);
+  Iterator *iter = NewInternalIterator(options, &latest_snapshot, &seed);
   return NewDBIterator(
-      this, user_comparator(), iter,
-      (options.snapshot != NULL
-       ? reinterpret_cast<const SnapshotImpl*>(options.snapshot)->number_
-       : latest_snapshot),
-      seed);
+    this, user_comparator(), iter,
+    (options.snapshot != NULL
+      ? reinterpret_cast<const SnapshotImpl *>(options.snapshot)->number_
+      : latest_snapshot),
+    seed);
 }
 
 void DBImpl::RecordReadSample(Slice key) {
@@ -1293,26 +1294,26 @@ void DBImpl::RecordReadSample(Slice key) {
   }
 }
 
-const Snapshot* DBImpl::GetSnapshot() {
+const Snapshot *DBImpl::GetSnapshot() {
   MutexLock l(&mutex_);
   return snapshots_.New(versions_->LastSequence());
 }
 
-void DBImpl::ReleaseSnapshot(const Snapshot* s) {
+void DBImpl::ReleaseSnapshot(const Snapshot *s) {
   MutexLock l(&mutex_);
-  snapshots_.Delete(reinterpret_cast<const SnapshotImpl*>(s));
+  snapshots_.Delete(reinterpret_cast<const SnapshotImpl *>(s));
 }
 
 // Convenience methods
-Status DBImpl::Put(const WriteOptions& o, const Slice& key, const Slice& val) {
+Status DBImpl::Put(const WriteOptions &o, const Slice &key, const Slice &val) {
   return DB::Put(o, key, val);
 }
 
-Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
+Status DBImpl::Delete(const WriteOptions &options, const Slice &key) {
   return DB::Delete(options, key);
 }
 
-Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
+Status DBImpl::Write(const WriteOptions &options, WriteBatch *my_batch) {
   Writer w(&mutex_);
   w.batch = my_batch;
   w.sync = options.sync;
@@ -1330,9 +1331,9 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   // May temporarily unlock and wait.
   Status status = MakeRoomForWrite(my_batch == NULL);
   uint64_t last_sequence = versions_->LastSequence();
-  Writer* last_writer = &w;
+  Writer *last_writer = &w;
   if (status.ok() && my_batch != NULL) {  // NULL batch is for compactions
-    WriteBatch* updates = BuildBatchGroup(&last_writer);
+    WriteBatch *updates = BuildBatchGroup(&last_writer);
     WriteBatchInternal::SetSequence(updates, last_sequence + 1);
     last_sequence += WriteBatchInternal::Count(updates);
 
@@ -1367,7 +1368,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   }
 
   while (true) {
-    Writer* ready = writers_.front();
+    Writer *ready = writers_.front();
     writers_.pop_front();
     if (ready != &w) {
       ready->status = status;
@@ -1387,10 +1388,10 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
 
 // REQUIRES: Writer list must be non-empty
 // REQUIRES: First writer must have a non-NULL batch
-WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
+WriteBatch *DBImpl::BuildBatchGroup(Writer **last_writer) {
   assert(!writers_.empty());
-  Writer* first = writers_.front();
-  WriteBatch* result = first->batch;
+  Writer *first = writers_.front();
+  WriteBatch *result = first->batch;
   assert(result != NULL);
 
   size_t size = WriteBatchInternal::ByteSize(first->batch);
@@ -1399,15 +1400,15 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
   // original write is small, limit the growth so we do not slow
   // down the small write too much.
   size_t max_size = 1 << 20;
-  if (size <= (128<<10)) {
-    max_size = size + (128<<10);
+  if (size <= (128 << 10)) {
+    max_size = size + (128 << 10);
   }
 
   *last_writer = first;
-  std::deque<Writer*>::iterator iter = writers_.begin();
+  std::deque<Writer *>::iterator iter = writers_.begin();
   ++iter;  // Advance past "first"
   for (; iter != writers_.end(); ++iter) {
-    Writer* w = *iter;
+    Writer *w = *iter;
     if (w->sync && !first->sync) {
       // Do not include a sync write into a batch handled by a non-sync write.
       break;
@@ -1447,8 +1448,8 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       s = bg_error_;
       break;
     } else if (
-        allow_delay &&
-        versions_->NumLevelFiles(0) >= config::kL0_SlowdownWritesTrigger) {
+      allow_delay &&
+      versions_->NumLevelFiles(0) >= config::kL0_SlowdownWritesTrigger) {
       // We are getting close to hitting a hard limit on the number of
       // L0 files.  Rather than delaying a single write by several
       // seconds when we hit the hard limit, start delaying each
@@ -1460,12 +1461,12 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       allow_delay = false;  // Do not delay a single write more than once
       mutex_.Lock();
     } else if (!force &&
-               (mem_->ApproximateMemoryUsage() <= options_.write_buffer_size)) {
+      (mem_->ApproximateMemoryUsage() <= options_.write_buffer_size)) {
       // There is room in current memtable
       break;
-    } else if(suspending_compaction_.Acquire_Load()) {
-        // suspending, don't do this now
-        break;
+    } else if (suspending_compaction_.Acquire_Load()) {
+      // suspending, don't do this now
+      break;
     } else if (imm_ != NULL) {
       // We have filled up the current memtable, but the previous
       // one is still being compacted, so we wait.
@@ -1479,7 +1480,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       // Attempt to switch to a new memtable and trigger compaction of old
       assert(versions_->PrevLogNumber() == 0);
       uint64_t new_log_number = versions_->NewFileNumber();
-      WritableFile* lfile = NULL;
+      WritableFile *lfile = NULL;
       s = env_->NewWritableFile(LogFileName(dbname_, new_log_number), &lfile);
       if (!s.ok()) {
         // Avoid chewing through file number space in a tight loop.
@@ -1496,15 +1497,15 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       mem_ = new MemTable(internal_comparator_);
       mem_->Ref();
       force = false;   // Do not force another compaction if have room
-      if(!suspending_compaction_.Acquire_Load()) {
-         MaybeScheduleCompaction();
+      if (!suspending_compaction_.Acquire_Load()) {
+        MaybeScheduleCompaction();
       }
     }
   }
   return s;
 }
 
-bool DBImpl::GetProperty(const Slice& property, std::string* value) {
+bool DBImpl::GetProperty(const Slice &property, std::string *value) {
   value->clear();
 
   MutexLock l(&mutex_);
@@ -1522,35 +1523,35 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
     } else {
       char buf[100];
       snprintf(buf, sizeof(buf), "%d",
-               versions_->NumLevelFiles(static_cast<int>(level)));
+        versions_->NumLevelFiles(static_cast<int>(level)));
       *value = buf;
       return true;
     }
   } else if (in == "stats") {
     char buf[200];
     snprintf(buf, sizeof(buf),
-             "                               Compactions\n"
-             "Level  Files Size(MB) Time(sec) Read(MB) Write(MB)\n"
-             "--------------------------------------------------\n"
-             );
+      "                               Compactions\n"
+      "Level  Files Size(MB) Time(sec) Read(MB) Write(MB)\n"
+      "--------------------------------------------------\n"
+    );
     value->append(buf);
     for (int level = 0; level < config::kNumLevels; level++) {
       int files = versions_->NumLevelFiles(level);
       if (stats_[level].micros > 0 || files > 0) {
         snprintf(
-            buf, sizeof(buf),
-            "%3d %8d %8.0f %9.2f %8.2f %9.2f\n",
-            level,
-            files,
-            versions_->NumLevelBytes(level) / 1048576.0,
-            stats_[level].micros / 1e6,
-            stats_[level].bytes_read / 1048576.0,
-            stats_[level].bytes_written / 1048576.0);
+          buf, sizeof(buf),
+          "%3d %8d %8.0f %9.2f %8.2f %9.2f\n",
+          level,
+          files,
+          versions_->NumLevelBytes(level) / 1048576.0,
+          stats_[level].micros / 1e6,
+          stats_[level].bytes_read / 1048576.0,
+          stats_[level].bytes_written / 1048576.0);
         value->append(buf);
       }
     }
     return true;
-  // BLOCK ADDED FOR MINECRAFT
+    // BLOCK ADDED FOR MINECRAFT
   } else if (in == "jsonstats") {
     char buf[200];
     value->append("{\n");
@@ -1609,7 +1610,7 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
     }
     char buf[50];
     snprintf(buf, sizeof(buf), "%llu",
-             static_cast<unsigned long long>(total_usage));
+      static_cast<unsigned long long>(total_usage));
     value->append(buf);
     return true;
   }
@@ -1618,10 +1619,10 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
 }
 
 void DBImpl::GetApproximateSizes(
-    const Range* range, int n,
-    uint64_t* sizes) {
+  const Range *range, int n,
+  uint64_t *sizes) {
   // TODO(opt): better implementation
-  Version* v;
+  Version *v;
   {
     MutexLock l(&mutex_);
     versions_->current()->Ref();
@@ -1645,28 +1646,28 @@ void DBImpl::GetApproximateSizes(
 
 // Default implementations of convenience methods that subclasses of DB
 // can call if they wish
-Status DB::Put(const WriteOptions& opt, const Slice& key, const Slice& value) {
+Status DB::Put(const WriteOptions &opt, const Slice &key, const Slice &value) {
   WriteBatch batch;
   batch.Put(key, value);
   return Write(opt, &batch);
 }
 
-Status DB::Delete(const WriteOptions& opt, const Slice& key) {
+Status DB::Delete(const WriteOptions &opt, const Slice &key) {
   WriteBatch batch;
   batch.Delete(key);
   return Write(opt, &batch);
 }
 
-DB::~DB() { }
+DB::~DB() {}
 
 Status DB::Open(
-  const Options& options,
-  const std::string& dbname,
-  DB** dbptr
+  const Options &options,
+  const std::string &dbname,
+  DB **dbptr
 ) {
   *dbptr = NULL;
 
-  DBImpl* impl = new DBImpl(options, dbname);
+  DBImpl *impl = new DBImpl(options, dbname);
   impl->mutex_.Lock();
   VersionEdit edit;
   // Recover handles create_if_missing, error_if_exists
@@ -1675,9 +1676,9 @@ Status DB::Open(
   if (s.ok() && impl->mem_ == NULL) {
     // Create new log and a corresponding memtable.
     uint64_t new_log_number = impl->versions_->NewFileNumber();
-    WritableFile* lfile;
+    WritableFile *lfile;
     s = options.env->NewWritableFile(LogFileName(dbname, new_log_number),
-                                     &lfile);
+      &lfile);
     if (s.ok()) {
       edit.SetLogNumber(new_log_number);
       impl->logfile_ = lfile;
@@ -1706,10 +1707,10 @@ Status DB::Open(
   return s;
 }
 
-Snapshot::~Snapshot() { }
+Snapshot::~Snapshot() {}
 
-DLLX Status DestroyDB(const std::string& dbname, const Options& options) {
-  Env* env = options.env;
+DLLX Status DestroyDB(const std::string &dbname, const Options &options) {
+  Env *env = options.env;
   std::vector<std::string> filenames;
   // Ignore error in case directory does not exist
   env->GetChildren(dbname, &filenames);
@@ -1717,7 +1718,7 @@ DLLX Status DestroyDB(const std::string& dbname, const Options& options) {
     return Status::OK();
   }
 
-  FileLock* lock;
+  FileLock *lock;
   const std::string lockname = LockFileName(dbname);
   Status result = env->LockFile(lockname, &lock);
   if (result.ok()) {
@@ -1725,7 +1726,7 @@ DLLX Status DestroyDB(const std::string& dbname, const Options& options) {
     FileType type;
     for (size_t i = 0; i < filenames.size(); i++) {
       if (ParseFileName(filenames[i], &number, &type) &&
-          type != kDBLockFile) {  // Lock file will be deleted at end
+        type != kDBLockFile) {  // Lock file will be deleted at end
         Status del = env->DeleteFile(dbname + "/" + filenames[i]);
         if (result.ok() && !del.ok()) {
           result = del;
@@ -1744,7 +1745,7 @@ DLLX Status DestroyDB(const std::string& dbname, const Options& options) {
 // ----------------------------------------------------------------------------
 
 #if 0
-static void DumpInternalIter(Iterator* iter) {
+static void DumpInternalIter(Iterator *iter) {
   for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
     ParsedInternalKey k;
     if (!ParseInternalKey(iter->key(), &k)) {
@@ -1764,7 +1765,7 @@ namespace {
 // representation into a single entry while accounting for sequence
 // numbers, deletion markers, overwrites, etc.
 class DBIter: public Iterator {
- public:
+public:
   // Which direction is the iterator currently moving?
   // (1) When moving forward, the internal iterator is positioned at
   //     the exact entry that yields this->key(), this->value()
@@ -1775,21 +1776,22 @@ class DBIter: public Iterator {
     kReverse
   };
 
-  DBIter(DBImpl* db, const Comparator* cmp, Iterator* iter, SequenceNumber s,
-         uint32_t seed)
-      : db_(db),
-        user_comparator_(cmp),
-        iter_(iter),
-        sequence_(s),
-        direction_(kForward),
-        valid_(false),
-        rnd_(seed),
-        bytes_counter_(RandomPeriod()) {
-  }
+  DBIter(DBImpl *db, const Comparator *cmp, Iterator *iter, SequenceNumber s,
+    uint32_t seed)
+    : db_(db),
+    user_comparator_(cmp),
+    iter_(iter),
+    sequence_(s),
+    direction_(kForward),
+    valid_(false),
+    rnd_(seed),
+    bytes_counter_(RandomPeriod()) {}
   virtual ~DBIter() {
     delete iter_;
   }
-  virtual bool Valid() const { return valid_; }
+  virtual bool Valid() const {
+    return valid_;
+  }
   virtual Slice key() const {
     assert(valid_);
     return (direction_ == kForward) ? ExtractUserKey(iter_->key()) : saved_key_;
@@ -1808,16 +1810,16 @@ class DBIter: public Iterator {
 
   virtual void Next();
   virtual void Prev();
-  virtual void Seek(const Slice& target);
+  virtual void Seek(const Slice &target);
   virtual void SeekToFirst();
   virtual void SeekToLast();
 
- private:
-  void FindNextUserEntry(bool skipping, std::string* skip);
+private:
+  void FindNextUserEntry(bool skipping, std::string *skip);
   void FindPrevUserEntry();
-  bool ParseKey(ParsedInternalKey* key);
+  bool ParseKey(ParsedInternalKey *key);
 
-  inline void SaveKey(const Slice& k, std::string* dst) {
+  inline void SaveKey(const Slice &k, std::string *dst) {
     dst->assign(k.data(), k.size());
   }
 
@@ -1832,12 +1834,12 @@ class DBIter: public Iterator {
 
   // Pick next gap with average value of config::kReadBytesPeriod.
   ssize_t RandomPeriod() {
-    return rnd_.Uniform(2*config::kReadBytesPeriod);
+    return rnd_.Uniform(2 * config::kReadBytesPeriod);
   }
 
-  DBImpl* db_;
-  const Comparator* const user_comparator_;
-  Iterator* const iter_;
+  DBImpl *db_;
+  const Comparator *const user_comparator_;
+  Iterator *const iter_;
   SequenceNumber const sequence_;
 
   Status status_;
@@ -1850,11 +1852,11 @@ class DBIter: public Iterator {
   ssize_t bytes_counter_;
 
   // No copying allowed
-  DBIter(const DBIter&);
-  void operator=(const DBIter&);
+  DBIter(const DBIter &);
+  void operator=(const DBIter &);
 };
 
-inline bool DBIter::ParseKey(ParsedInternalKey* ikey) {
+inline bool DBIter::ParseKey(ParsedInternalKey *ikey) {
   Slice k = iter_->key();
   ssize_t n = k.size() + iter_->value().size();
   bytes_counter_ -= n;
@@ -1897,7 +1899,7 @@ void DBIter::Next() {
   FindNextUserEntry(true, &saved_key_);
 }
 
-void DBIter::FindNextUserEntry(bool skipping, std::string* skip) {
+void DBIter::FindNextUserEntry(bool skipping, std::string *skip) {
   // Loop until we hit an acceptable entry to yield
   assert(iter_->Valid());
   assert(direction_ == kForward);
@@ -1913,7 +1915,7 @@ void DBIter::FindNextUserEntry(bool skipping, std::string* skip) {
           break;
         case kTypeValue:
           if (skipping &&
-              user_comparator_->Compare(ikey.user_key, *skip) <= 0) {
+            user_comparator_->Compare(ikey.user_key, *skip) <= 0) {
             // Entry hidden
           } else {
             valid_ = true;
@@ -1946,7 +1948,7 @@ void DBIter::Prev() {
         return;
       }
       if (user_comparator_->Compare(ExtractUserKey(iter_->key()),
-                                    saved_key_) < 0) {
+        saved_key_) < 0) {
         break;
       }
     }
@@ -1965,7 +1967,7 @@ void DBIter::FindPrevUserEntry() {
       ParsedInternalKey ikey;
       if (ParseKey(&ikey) && ikey.sequence <= sequence_) {
         if ((value_type != kTypeDeletion) &&
-            user_comparator_->Compare(ikey.user_key, saved_key_) < 0) {
+          user_comparator_->Compare(ikey.user_key, saved_key_) < 0) {
           // We encountered a non-deleted value in entries for previous keys,
           break;
         }
@@ -1998,12 +2000,12 @@ void DBIter::FindPrevUserEntry() {
   }
 }
 
-void DBIter::Seek(const Slice& target) {
+void DBIter::Seek(const Slice &target) {
   direction_ = kForward;
   ClearSavedValue();
   saved_key_.clear();
   AppendInternalKey(
-      &saved_key_, ParsedInternalKey(target, sequence_, kValueTypeForSeek));
+    &saved_key_, ParsedInternalKey(target, sequence_, kValueTypeForSeek));
   iter_->Seek(saved_key_);
   if (iter_->Valid()) {
     FindNextUserEntry(false, &saved_key_ /* temporary storage */);
@@ -2032,10 +2034,10 @@ void DBIter::SeekToLast() {
 
 }  // anonymous namespace
 
-Iterator* NewDBIterator(
-  DBImpl* db,
-  const Comparator* user_key_comparator,
-  Iterator* internal_iter,
+Iterator *NewDBIterator(
+  DBImpl *db,
+  const Comparator *user_key_comparator,
+  Iterator *internal_iter,
   SequenceNumber sequence,
   uint32_t seed
 ) {
@@ -2052,7 +2054,7 @@ static uint64_t PackSequenceAndType(uint64_t seq, ValueType t) {
   return (seq << 8) | t;
 }
 
-void AppendInternalKey(std::string* result, const ParsedInternalKey& key) {
+void AppendInternalKey(std::string *result, const ParsedInternalKey &key) {
   result->append(key.user_key.data(), key.user_key.size());
   PutFixed64(result, PackSequenceAndType(key.sequence, key.type));
 }
@@ -2060,8 +2062,8 @@ void AppendInternalKey(std::string* result, const ParsedInternalKey& key) {
 std::string ParsedInternalKey::DebugString() const {
   char buf[50];
   snprintf(buf, sizeof(buf), "' @ %llu : %d",
-           (unsigned long long) sequence,
-           int(type));
+    (unsigned long long) sequence,
+    int(type));
   std::string result = "'";
   result += EscapeString(user_key.ToString());
   result += buf;
@@ -2080,11 +2082,11 @@ std::string InternalKey::DebugString() const {
   return result;
 }
 
-const char* InternalKeyComparator::Name() const {
+const char *InternalKeyComparator::Name() const {
   return "leveldb.InternalKeyComparator";
 }
 
-int InternalKeyComparator::Compare(const Slice& akey, const Slice& bkey) const {
+int InternalKeyComparator::Compare(const Slice &akey, const Slice &bkey) const {
   // Order by:
   //    increasing user key (according to user-supplied comparator)
   //    decreasing sequence number
@@ -2103,47 +2105,47 @@ int InternalKeyComparator::Compare(const Slice& akey, const Slice& bkey) const {
 }
 
 void InternalKeyComparator::FindShortestSeparator(
-      std::string* start,
-      const Slice& limit) const {
+  std::string *start,
+  const Slice &limit) const {
   // Attempt to shorten the user portion of the key
   Slice user_start = ExtractUserKey(*start);
   Slice user_limit = ExtractUserKey(limit);
   std::string tmp(user_start.data(), user_start.size());
   user_comparator_->FindShortestSeparator(&tmp, user_limit);
   if (tmp.size() < user_start.size() &&
-      user_comparator_->Compare(user_start, tmp) < 0) {
+    user_comparator_->Compare(user_start, tmp) < 0) {
     // User key has become shorter physically, but larger logically.
     // Tack on the earliest possible number to the shortened user key.
-    PutFixed64(&tmp, PackSequenceAndType(kMaxSequenceNumber,kValueTypeForSeek));
+    PutFixed64(&tmp, PackSequenceAndType(kMaxSequenceNumber, kValueTypeForSeek));
     assert(this->Compare(*start, tmp) < 0);
     assert(this->Compare(tmp, limit) < 0);
     start->swap(tmp);
   }
 }
 
-void InternalKeyComparator::FindShortSuccessor(std::string* key) const {
+void InternalKeyComparator::FindShortSuccessor(std::string *key) const {
   Slice user_key = ExtractUserKey(*key);
   std::string tmp(user_key.data(), user_key.size());
   user_comparator_->FindShortSuccessor(&tmp);
   if (tmp.size() < user_key.size() &&
-      user_comparator_->Compare(user_key, tmp) < 0) {
+    user_comparator_->Compare(user_key, tmp) < 0) {
     // User key has become shorter physically, but larger logically.
     // Tack on the earliest possible number to the shortened user key.
-    PutFixed64(&tmp, PackSequenceAndType(kMaxSequenceNumber,kValueTypeForSeek));
+    PutFixed64(&tmp, PackSequenceAndType(kMaxSequenceNumber, kValueTypeForSeek));
     assert(this->Compare(*key, tmp) < 0);
     key->swap(tmp);
   }
 }
 
-const char* InternalFilterPolicy::Name() const {
+const char *InternalFilterPolicy::Name() const {
   return user_policy_->Name();
 }
 
-void InternalFilterPolicy::CreateFilter(const Slice* keys, int n,
-                                        std::string* dst) const {
+void InternalFilterPolicy::CreateFilter(const Slice *keys, int n,
+  std::string *dst) const {
   // We rely on the fact that the code in table.cc does not mind us
   // adjusting keys[].
-  Slice* mkey = const_cast<Slice*>(keys);
+  Slice *mkey = const_cast<Slice *>(keys);
   for (int i = 0; i < n; i++) {
     mkey[i] = ExtractUserKey(keys[i]);
     // TODO(sanjay): Suppress dups?
@@ -2151,14 +2153,14 @@ void InternalFilterPolicy::CreateFilter(const Slice* keys, int n,
   user_policy_->CreateFilter(keys, n, dst);
 }
 
-bool InternalFilterPolicy::KeyMayMatch(const Slice& key, const Slice& f) const {
+bool InternalFilterPolicy::KeyMayMatch(const Slice &key, const Slice &f) const {
   return user_policy_->KeyMayMatch(ExtractUserKey(key), f);
 }
 
-LookupKey::LookupKey(const Slice& user_key, SequenceNumber s) {
+LookupKey::LookupKey(const Slice &user_key, SequenceNumber s) {
   size_t usize = user_key.size();
   size_t needed = usize + 13;  // A conservative estimate
-  char* dst;
+  char *dst;
   if (needed <= sizeof(space_)) {
     dst = space_;
   } else {
@@ -2180,7 +2182,7 @@ LookupKey::LookupKey(const Slice& user_key, SequenceNumber s) {
 
 namespace {
 
-bool GuessType(const std::string& fname, FileType* type) {
+bool GuessType(const std::string &fname, FileType *type) {
   size_t pos = fname.rfind('/');
   std::string basename;
   if (pos == std::string::npos) {
@@ -2193,10 +2195,10 @@ bool GuessType(const std::string& fname, FileType* type) {
 }
 
 // Notified when log reader encounters corruption.
-class CorruptionReporter : public log::Reader::Reporter {
- public:
-  WritableFile* dst_;
-  virtual void Corruption(size_t bytes, const Status& status) {
+class CorruptionReporter: public log::Reader::Reporter {
+public:
+  WritableFile *dst_;
+  virtual void Corruption(size_t bytes, const Status &status) {
     std::string r = "corruption: ";
     AppendNumberTo(&r, bytes);
     r += " bytes; ";
@@ -2207,10 +2209,10 @@ class CorruptionReporter : public log::Reader::Reporter {
 };
 
 // Print contents of a log file. (*func)() is called on every record.
-Status PrintLogContents(Env* env, const std::string& fname,
-                        void (*func)(uint64_t, Slice, WritableFile*),
-                        WritableFile* dst) {
-  SequentialFile* file;
+Status PrintLogContents(Env *env, const std::string &fname,
+  void (*func)(uint64_t, Slice, WritableFile *),
+  WritableFile *dst) {
+  SequentialFile *file;
   Status s = env->NewSequentialFile(fname, &file);
   if (!s.ok()) {
     return s;
@@ -2228,10 +2230,10 @@ Status PrintLogContents(Env* env, const std::string& fname,
 }
 
 // Called on every item found in a WriteBatch.
-class WriteBatchItemPrinter : public WriteBatch::Handler {
- public:
-  WritableFile* dst_;
-  virtual void Put(const Slice& key, const Slice& value) {
+class WriteBatchItemPrinter: public WriteBatch::Handler {
+public:
+  WritableFile *dst_;
+  virtual void Put(const Slice &key, const Slice &value) {
     std::string r = "  put '";
     AppendEscapedStringTo(&r, key);
     r += "' '";
@@ -2239,7 +2241,7 @@ class WriteBatchItemPrinter : public WriteBatch::Handler {
     r += "'\n";
     dst_->Append(r);
   }
-  virtual void Delete(const Slice& key) {
+  virtual void Delete(const Slice &key) {
     std::string r = "  del '";
     AppendEscapedStringTo(&r, key);
     r += "'\n";
@@ -2250,7 +2252,7 @@ class WriteBatchItemPrinter : public WriteBatch::Handler {
 
 // Called on every log record (each one of which is a WriteBatch)
 // found in a kLogFile.
-static void WriteBatchPrinter(uint64_t pos, Slice record, WritableFile* dst) {
+static void WriteBatchPrinter(uint64_t pos, Slice record, WritableFile *dst) {
   std::string r = "--- offset ";
   AppendNumberTo(&r, pos);
   r += "; ";
@@ -2275,13 +2277,13 @@ static void WriteBatchPrinter(uint64_t pos, Slice record, WritableFile* dst) {
   }
 }
 
-Status DumpLog(Env* env, const std::string& fname, WritableFile* dst) {
+Status DumpLog(Env *env, const std::string &fname, WritableFile *dst) {
   return PrintLogContents(env, fname, WriteBatchPrinter, dst);
 }
 
 // Called on every log record (each one of which is a WriteBatch)
 // found in a kDescriptorFile.
-static void VersionEditPrinter(uint64_t pos, Slice record, WritableFile* dst) {
+static void VersionEditPrinter(uint64_t pos, Slice record, WritableFile *dst) {
   std::string r = "--- offset ";
   AppendNumberTo(&r, pos);
   r += "; ";
@@ -2296,14 +2298,14 @@ static void VersionEditPrinter(uint64_t pos, Slice record, WritableFile* dst) {
   dst->Append(r);
 }
 
-Status DumpDescriptor(Env* env, const std::string& fname, WritableFile* dst) {
+Status DumpDescriptor(Env *env, const std::string &fname, WritableFile *dst) {
   return PrintLogContents(env, fname, VersionEditPrinter, dst);
 }
 
-Status DumpTable(Env* env, const std::string& fname, WritableFile* dst) {
+Status DumpTable(Env *env, const std::string &fname, WritableFile *dst) {
   uint64_t file_size;
-  RandomAccessFile* file = NULL;
-  Table* table = NULL;
+  RandomAccessFile *file = NULL;
+  Table *table = NULL;
   Status s = env->GetFileSize(fname, &file_size);
   if (s.ok()) {
     s = env->NewRandomAccessFile(fname, &file);
@@ -2323,7 +2325,7 @@ Status DumpTable(Env* env, const std::string& fname, WritableFile* dst) {
 
   ReadOptions ro;
   ro.fill_cache = false;
-  Iterator* iter = table->NewIterator(ro);
+  Iterator *iter = table->NewIterator(ro);
   std::string r;
   for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
     r.clear();
@@ -2367,7 +2369,7 @@ Status DumpTable(Env* env, const std::string& fname, WritableFile* dst) {
 
 }  // namespace
 
-Status DumpFile(Env* env, const std::string& fname, WritableFile* dst) {
+Status DumpFile(Env *env, const std::string &fname, WritableFile *dst) {
   FileType ftype;
   if (!GuessType(fname, &ftype)) {
     return Status::InvalidArgument(fname + ": unknown file type");
@@ -2387,60 +2389,60 @@ Status DumpFile(Env* env, const std::string& fname, WritableFile* dst) {
 // ----------------------------------------------------------------------------
 
 // A utility routine: write "data" to the named file and Sync() it.
-extern Status WriteStringToFileSync(Env* env, const Slice& data,
-                                    const std::string& fname);
+extern Status WriteStringToFileSync(Env *env, const Slice &data,
+  const std::string &fname);
 
-static std::string MakeFileName(const std::string& name, uint64_t number,
-                                const char* suffix) {
+static std::string MakeFileName(const std::string &name, uint64_t number,
+  const char *suffix) {
   char buf[100];
   snprintf(buf, sizeof(buf), "/%06llu.%s",
-           static_cast<unsigned long long>(number),
-           suffix);
+    static_cast<unsigned long long>(number),
+    suffix);
   return name + buf;
 }
 
-std::string LogFileName(const std::string& name, uint64_t number) {
+std::string LogFileName(const std::string &name, uint64_t number) {
   assert(number > 0);
   return MakeFileName(name, number, "log");
 }
 
-std::string TableFileName(const std::string& name, uint64_t number) {
+std::string TableFileName(const std::string &name, uint64_t number) {
   assert(number > 0);
   return MakeFileName(name, number, "ldb");
 }
 
-std::string SSTTableFileName(const std::string& name, uint64_t number) {
+std::string SSTTableFileName(const std::string &name, uint64_t number) {
   assert(number > 0);
   return MakeFileName(name, number, "sst");
 }
 
-std::string DescriptorFileName(const std::string& dbname, uint64_t number) {
+std::string DescriptorFileName(const std::string &dbname, uint64_t number) {
   assert(number > 0);
   char buf[100];
   snprintf(buf, sizeof(buf), "/MANIFEST-%06llu",
-           static_cast<unsigned long long>(number));
+    static_cast<unsigned long long>(number));
   return dbname + buf;
 }
 
-std::string CurrentFileName(const std::string& dbname) {
+std::string CurrentFileName(const std::string &dbname) {
   return dbname + "/CURRENT";
 }
 
-std::string LockFileName(const std::string& dbname) {
+std::string LockFileName(const std::string &dbname) {
   return dbname + "/LOCK";
 }
 
-std::string TempFileName(const std::string& dbname, uint64_t number) {
+std::string TempFileName(const std::string &dbname, uint64_t number) {
   assert(number > 0);
   return MakeFileName(dbname, number, "dbtmp");
 }
 
-std::string InfoLogFileName(const std::string& dbname) {
+std::string InfoLogFileName(const std::string &dbname) {
   return dbname + "/LOG";
 }
 
 // Return the name of the old info log file for "dbname".
-std::string OldInfoLogFileName(const std::string& dbname) {
+std::string OldInfoLogFileName(const std::string &dbname) {
   return dbname + "/LOG.old";
 }
 
@@ -2451,9 +2453,9 @@ std::string OldInfoLogFileName(const std::string& dbname) {
 //    dbname/LOG.old
 //    dbname/MANIFEST-[0-9]+
 //    dbname/[0-9]+.(log|sst|ldb)
-bool ParseFileName(const std::string& fname,
-                   uint64_t* number,
-                   FileType* type) {
+bool ParseFileName(const std::string &fname,
+  uint64_t *number,
+  FileType *type) {
   Slice rest(fname);
   if (rest == "CURRENT") {
     *number = 0;
@@ -2497,8 +2499,8 @@ bool ParseFileName(const std::string& fname,
   return true;
 }
 
-Status SetCurrentFile(Env* env, const std::string& dbname,
-                      uint64_t descriptor_number) {
+Status SetCurrentFile(Env *env, const std::string &dbname,
+  uint64_t descriptor_number) {
   // Remove leading "dbname/" and add newline to manifest file name
   std::string manifest = DescriptorFileName(dbname, descriptor_number);
   Slice contents = manifest;
@@ -2521,22 +2523,20 @@ Status SetCurrentFile(Env* env, const std::string& dbname,
 
 namespace log {
 
-Reader::Reporter::~Reporter() {
-}
+Reader::Reporter::~Reporter() {}
 
-Reader::Reader(SequentialFile* file, Reporter* reporter, bool checksum,
-               uint64_t initial_offset)
-    : file_(file),
-      reporter_(reporter),
-      checksum_(checksum),
-      backing_store_(new char[kBlockSize]),
-      buffer_(),
-      eof_(false),
-      last_record_offset_(0),
-      end_of_buffer_offset_(0),
-      initial_offset_(initial_offset),
-      resyncing_(initial_offset > 0) {
-}
+Reader::Reader(SequentialFile *file, Reporter *reporter, bool checksum,
+  uint64_t initial_offset)
+  : file_(file),
+  reporter_(reporter),
+  checksum_(checksum),
+  backing_store_(new char[kBlockSize]),
+  buffer_(),
+  eof_(false),
+  last_record_offset_(0),
+  end_of_buffer_offset_(0),
+  initial_offset_(initial_offset),
+  resyncing_(initial_offset > 0) {}
 
 Reader::~Reader() {
   delete[] backing_store_;
@@ -2566,7 +2566,7 @@ bool Reader::SkipToInitialBlock() {
   return true;
 }
 
-bool Reader::ReadRecord(Slice* record, std::string* scratch) {
+bool Reader::ReadRecord(Slice *record, std::string *scratch) {
   if (last_record_offset_ < initial_offset_) {
     if (!SkipToInitialBlock()) {
       return false;
@@ -2588,7 +2588,7 @@ bool Reader::ReadRecord(Slice* record, std::string* scratch) {
     // internal buffer. Calculate the offset of the next physical record now
     // that it has returned, properly accounting for its header size.
     uint64_t physical_record_offset =
-        end_of_buffer_offset_ - buffer_.size() - kHeaderSize - fragment.size();
+      end_of_buffer_offset_ - buffer_.size() - kHeaderSize - fragment.size();
 
     if (resyncing_) {
       if (record_type == kMiddleType) {
@@ -2640,7 +2640,7 @@ bool Reader::ReadRecord(Slice* record, std::string* scratch) {
       case kMiddleType:
         if (!in_fragmented_record) {
           ReportCorruption(fragment.size(),
-                           "missing start of fragmented record(1)");
+            "missing start of fragmented record(1)");
         } else {
           scratch->append(fragment.data(), fragment.size());
         }
@@ -2649,7 +2649,7 @@ bool Reader::ReadRecord(Slice* record, std::string* scratch) {
       case kLastType:
         if (!in_fragmented_record) {
           ReportCorruption(fragment.size(),
-                           "missing start of fragmented record(2)");
+            "missing start of fragmented record(2)");
         } else {
           scratch->append(fragment.data(), fragment.size());
           *record = Slice(*scratch);
@@ -2675,12 +2675,13 @@ bool Reader::ReadRecord(Slice* record, std::string* scratch) {
         }
         break;
 
-      default: {
+      default:
+      {
         char buf[40];
         snprintf(buf, sizeof(buf), "unknown record type %u", record_type);
         ReportCorruption(
-            (fragment.size() + (in_fragmented_record ? scratch->size() : 0)),
-            buf);
+          (fragment.size() + (in_fragmented_record ? scratch->size() : 0)),
+          buf);
         in_fragmented_record = false;
         scratch->clear();
         break;
@@ -2694,18 +2695,18 @@ uint64_t Reader::LastRecordOffset() {
   return last_record_offset_;
 }
 
-void Reader::ReportCorruption(uint64_t bytes, const char* reason) {
+void Reader::ReportCorruption(uint64_t bytes, const char *reason) {
   ReportDrop(bytes, Status::Corruption(reason));
 }
 
-void Reader::ReportDrop(uint64_t bytes, const Status& reason) {
+void Reader::ReportDrop(uint64_t bytes, const Status &reason) {
   if (reporter_ != NULL &&
-      end_of_buffer_offset_ - buffer_.size() - bytes >= initial_offset_) {
+    end_of_buffer_offset_ - buffer_.size() - bytes >= initial_offset_) {
     reporter_->Corruption(static_cast<size_t>(bytes), reason);
   }
 }
 
-unsigned int Reader::ReadPhysicalRecord(Slice* result) {
+unsigned int Reader::ReadPhysicalRecord(Slice *result) {
   while (true) {
     if (buffer_.size() < kHeaderSize) {
       if (!eof_) {
@@ -2733,7 +2734,7 @@ unsigned int Reader::ReadPhysicalRecord(Slice* result) {
     }
 
     // Parse the header
-    const char* header = buffer_.data();
+    const char *header = buffer_.data();
     const uint32_t a = static_cast<uint32_t>(header[4]) & 0xff;
     const uint32_t b = static_cast<uint32_t>(header[5]) & 0xff;
     const unsigned int type = header[6];
@@ -2779,7 +2780,7 @@ unsigned int Reader::ReadPhysicalRecord(Slice* result) {
 
     // Skip physical record that started before initial_offset_
     if (end_of_buffer_offset_ - buffer_.size() - kHeaderSize - length <
-        initial_offset_) {
+      initial_offset_) {
       result->clear();
       return kBadRecord;
     }
@@ -2793,29 +2794,28 @@ unsigned int Reader::ReadPhysicalRecord(Slice* result) {
 // - db/log_writer.cc
 // ----------------------------------------------------------------------------
 
-static void InitTypeCrc(uint32_t* type_crc) {
+static void InitTypeCrc(uint32_t *type_crc) {
   for (int i = 0; i <= kMaxRecordType; i++) {
     char t = static_cast<char>(i);
     type_crc[i] = crc32c::Value(&t, 1);
   }
 }
 
-Writer::Writer(WritableFile* dest)
-    : dest_(dest),
-      block_offset_(0) {
+Writer::Writer(WritableFile *dest)
+  : dest_(dest),
+  block_offset_(0) {
   InitTypeCrc(type_crc_);
 }
 
-Writer::Writer(WritableFile* dest, uint64_t dest_length)
-    : dest_(dest), block_offset_(dest_length % kBlockSize) {
+Writer::Writer(WritableFile *dest, uint64_t dest_length)
+  : dest_(dest), block_offset_(dest_length %kBlockSize) {
   InitTypeCrc(type_crc_);
 }
 
-Writer::~Writer() {
-}
+Writer::~Writer() {}
 
-Status Writer::AddRecord(const Slice& slice) {
-  const char* ptr = slice.data();
+Status Writer::AddRecord(const Slice &slice) {
+  const char *ptr = slice.data();
   size_t left = slice.size();
 
   // Fragment the record if necessary and emit it.  Note that if slice
@@ -2862,7 +2862,7 @@ Status Writer::AddRecord(const Slice& slice) {
   return s;
 }
 
-Status Writer::EmitPhysicalRecord(RecordType t, const char* ptr, size_t n) {
+Status Writer::EmitPhysicalRecord(RecordType t, const char *ptr, size_t n) {
   assert(n <= 0xffff);  // Must fit in two bytes
   assert(block_offset_ + kHeaderSize + n <= kBlockSize);
 
@@ -2891,31 +2891,32 @@ Status Writer::EmitPhysicalRecord(RecordType t, const char* ptr, size_t n) {
 
 }  // namespace log
 
-// ----------------------------------------------------------------------------
-// - db/memtable.cc
-// ----------------------------------------------------------------------------
+   // ----------------------------------------------------------------------------
+   // - db/memtable.cc
+   // ----------------------------------------------------------------------------
 
-static Slice GetLengthPrefixedSlice(const char* data) {
+static Slice GetLengthPrefixedSlice(const char *data) {
   uint32_t len;
-  const char* p = data;
+  const char *p = data;
   p = GetVarint32Ptr(p, p + 5, &len);  // +5: we assume "p" is not corrupted
   return Slice(p, len);
 }
 
-MemTable::MemTable(const InternalKeyComparator& cmp)
-    : comparator_(cmp),
-      refs_(0),
-      table_(comparator_, &arena_) {
-}
+MemTable::MemTable(const InternalKeyComparator &cmp)
+  : comparator_(cmp),
+  refs_(0),
+  table_(comparator_, &arena_) {}
 
 MemTable::~MemTable() {
   assert(refs_ == 0);
 }
 
-size_t MemTable::ApproximateMemoryUsage() { return arena_.MemoryUsage(); }
+size_t MemTable::ApproximateMemoryUsage() {
+  return arena_.MemoryUsage();
+}
 
-int MemTable::KeyComparator::operator()(const char* aptr, const char* bptr)
-    const {
+int MemTable::KeyComparator::operator()(const char *aptr, const char *bptr)
+const {
   // Internal keys are encoded as length-prefixed strings.
   Slice a = GetLengthPrefixedSlice(aptr);
   Slice b = GetLengthPrefixedSlice(bptr);
@@ -2925,7 +2926,7 @@ int MemTable::KeyComparator::operator()(const char* aptr, const char* bptr)
 // Encode a suitable internal key target for "target" and return it.
 // Uses *scratch as scratch space, and the returned pointer will point
 // into this scratch space.
-static const char* EncodeKey(std::string* scratch, const Slice& target) {
+static const char *EncodeKey(std::string *scratch, const Slice &target) {
   scratch->clear();
   PutVarint32(scratch, (uint32_t)target.size());
   scratch->append(target.data(), target.size());
@@ -2933,33 +2934,49 @@ static const char* EncodeKey(std::string* scratch, const Slice& target) {
 }
 
 class MemTableIterator: public Iterator {
- public:
-  explicit MemTableIterator(MemTable::Table* table) : iter_(table) { }
+public:
+  explicit MemTableIterator(MemTable::Table *table): iter_(table) {}
 
-  virtual bool Valid() const { return iter_.Valid(); }
-  virtual void Seek(const Slice& k) { iter_.Seek(EncodeKey(&tmp_, k)); }
-  virtual void SeekToFirst() { iter_.SeekToFirst(); }
-  virtual void SeekToLast() { iter_.SeekToLast(); }
-  virtual void Next() { iter_.Next(); }
-  virtual void Prev() { iter_.Prev(); }
-  virtual Slice key() const { return GetLengthPrefixedSlice(iter_.key()); }
+  virtual bool Valid() const {
+    return iter_.Valid();
+  }
+  virtual void Seek(const Slice &k) {
+    iter_.Seek(EncodeKey(&tmp_, k));
+  }
+  virtual void SeekToFirst() {
+    iter_.SeekToFirst();
+  }
+  virtual void SeekToLast() {
+    iter_.SeekToLast();
+  }
+  virtual void Next() {
+    iter_.Next();
+  }
+  virtual void Prev() {
+    iter_.Prev();
+  }
+  virtual Slice key() const {
+    return GetLengthPrefixedSlice(iter_.key());
+  }
   virtual Slice value() const {
     Slice key_slice = GetLengthPrefixedSlice(iter_.key());
     return GetLengthPrefixedSlice(key_slice.data() + key_slice.size());
   }
 
-  virtual Status status() const { return Status::OK(); }
+  virtual Status status() const {
+    return Status::OK();
+  }
 
- private:
+private:
   MemTable::Table::Iterator iter_;
   std::string tmp_;       // For passing to EncodeKey
 
   // No copying allowed
-  MemTableIterator(const MemTableIterator&);
-  void operator=(const MemTableIterator&);
+  MemTableIterator(const MemTableIterator &);
+  void operator=(const MemTableIterator &);
 };
 
-Iterator* MemTable::NewIterator() {
+Iterator *MemTable::NewIterator() {
   return new MemTableIterator(&table_);
 }
 
@@ -2968,8 +2985,8 @@ Iterator* MemTable::NewIterator() {
 #pragma warning ( disable : 4389 )
 #endif
 void MemTable::Add(SequenceNumber s, ValueType type,
-                   const Slice& key,
-                   const Slice& value) {
+  const Slice &key,
+  const Slice &value) {
   // Format of an entry is concatenation of:
   //  key_size     : varint32 of internal_key.size()
   //  key bytes    : char[internal_key.size()]
@@ -2979,10 +2996,10 @@ void MemTable::Add(SequenceNumber s, ValueType type,
   size_t val_size = value.size();
   size_t internal_key_size = key_size + 8;
   const size_t encoded_len =
-      VarintLength(internal_key_size) + internal_key_size +
-      VarintLength(val_size) + val_size;
-  char* buf = arena_.Allocate(encoded_len);
-  char* p = EncodeVarint32(buf, (uint32_t)internal_key_size);
+    VarintLength(internal_key_size) + internal_key_size +
+    VarintLength(val_size) + val_size;
+  char *buf = arena_.Allocate(encoded_len);
+  char *p = EncodeVarint32(buf, (uint32_t)internal_key_size);
   memcpy(p, key.data(), key_size);
   p += key_size;
   EncodeFixed64(p, (s << 8) | type);
@@ -2996,7 +3013,7 @@ void MemTable::Add(SequenceNumber s, ValueType type,
 #pragma warning ( pop )
 #endif
 
-bool MemTable::Get(const LookupKey& key, std::string* value, Status* s) {
+bool MemTable::Get(const LookupKey &key, std::string *value, Status *s) {
   Slice memkey = key.memtable_key();
   Table::Iterator iter(&table_);
   iter.Seek(memkey.data());
@@ -3010,20 +3027,21 @@ bool MemTable::Get(const LookupKey& key, std::string* value, Status* s) {
     // Check that it belongs to same user key.  We do not check the
     // sequence number since the Seek() call above should have skipped
     // all entries with overly large sequence numbers.
-    const char* entry = iter.key();
+    const char *entry = iter.key();
     uint32_t key_length;
-    const char* key_ptr = GetVarint32Ptr(entry, entry+5, &key_length);
+    const char *key_ptr = GetVarint32Ptr(entry, entry + 5, &key_length);
     if (comparator_.comparator.user_comparator()->Compare(
-            Slice(key_ptr, key_length - 8),
-            key.user_key()) == 0) {
+      Slice(key_ptr, key_length - 8),
+      key.user_key()) == 0) {
       // Correct user key
       const uint64_t tag = DecodeFixed64(key_ptr + key_length - 8);
       switch (static_cast<ValueType>(tag & 0xff)) {
-        case kTypeValue: {
-      if (value) {
-      Slice v = GetLengthPrefixedSlice(key_ptr + key_length);
-      value->assign(v.data(), v.size());
-      }
+        case kTypeValue:
+        {
+          if (value) {
+            Slice v = GetLengthPrefixedSlice(key_ptr + key_length);
+            value->assign(v.data(), v.size());
+          }
           return true;
         }
         case kTypeDeletion:
@@ -3064,16 +3082,16 @@ bool MemTable::Get(const LookupKey& key, std::string* value, Status* s) {
 namespace {
 
 class Repairer {
- public:
-  Repairer(const std::string& dbname, const Options& options)
-      : dbname_(dbname),
-        env_(options.env),
-        icmp_(options.comparator),
-        ipolicy_(options.filter_policy),
-        options_(SanitizeOptions(dbname, &icmp_, &ipolicy_, options)),
-        owns_info_log_(options_.info_log != options.info_log),
-        owns_cache_(options_.block_cache != options.block_cache),
-        next_file_number_(1) {
+public:
+  Repairer(const std::string &dbname, const Options &options)
+    : dbname_(dbname),
+    env_(options.env),
+    icmp_(options.comparator),
+    ipolicy_(options.filter_policy),
+    options_(SanitizeOptions(dbname, &icmp_, &ipolicy_, options)),
+    owns_info_log_(options_.info_log != options.info_log),
+    owns_cache_(options_.block_cache != options.block_cache),
+    next_file_number_(1) {
     // TableCache can be small since we expect each table to be opened once.
     table_cache_ = new TableCache(dbname_, &options_, 10);
   }
@@ -3101,31 +3119,31 @@ class Repairer {
         bytes += tables_[i].meta.file_size;
       }
       Log(options_.info_log,
-          "**** Repaired leveldb %s; "
-          "recovered %d files; %llu bytes. "
-          "Some data may have been lost. "
-          "****",
-          dbname_.c_str(),
-          static_cast<int>(tables_.size()),
-          bytes);
+        "**** Repaired leveldb %s; "
+        "recovered %d files; %llu bytes. "
+        "Some data may have been lost. "
+        "****",
+        dbname_.c_str(),
+        static_cast<int>(tables_.size()),
+        bytes);
     }
     return status;
   }
 
- private:
+private:
   struct TableInfo {
     FileMetaData meta;
     SequenceNumber max_sequence;
   };
 
   std::string const dbname_;
-  Env* const env_;
+  Env *const env_;
   InternalKeyComparator const icmp_;
   InternalFilterPolicy const ipolicy_;
   Options const options_;
   bool owns_info_log_;
   bool owns_cache_;
-  TableCache* table_cache_;
+  TableCache *table_cache_;
   VersionEdit edit_;
 
   std::vector<std::string> manifests_;
@@ -3173,30 +3191,30 @@ class Repairer {
       Status status = ConvertLogToTable(logs_[i]);
       if (!status.ok()) {
         Log(options_.info_log, "Log #%llu: ignoring conversion error: %s",
-            (unsigned long long) logs_[i],
-            status.ToString().c_str());
+          (unsigned long long) logs_[i],
+          status.ToString().c_str());
       }
       ArchiveFile(logname);
     }
   }
 
   Status ConvertLogToTable(uint64_t log) {
-    struct LogReporter : public log::Reader::Reporter {
-      Env* env;
-      Logger* info_log;
+    struct LogReporter: public log::Reader::Reporter {
+      Env *env;
+      Logger *info_log;
       uint64_t lognum;
-      virtual void Corruption(size_t bytes, const Status& s) {
+      virtual void Corruption(size_t bytes, const Status &s) {
         // We print error messages for corruption, but continue repairing.
         Log(info_log, "Log #%llu: dropping %d bytes; %s",
-            (unsigned long long) lognum,
-            static_cast<int>(bytes),
-            s.ToString().c_str());
+          (unsigned long long) lognum,
+          static_cast<int>(bytes),
+          s.ToString().c_str());
       }
     };
 
     // Open the log file
     std::string logname = LogFileName(dbname_, log);
-    SequentialFile* lfile;
+    SequentialFile *lfile;
     Status status = env_->NewSequentialFile(logname, &lfile);
     if (!status.ok()) {
       return status;
@@ -3212,19 +3230,19 @@ class Repairer {
     // propagating bad information (like overly large sequence
     // numbers).
     log::Reader reader(lfile, &reporter, false/*do not checksum*/,
-                       0/*initial_offset*/);
+      0/*initial_offset*/);
 
     // Read all the records and add to a memtable
     std::string scratch;
     Slice record;
     WriteBatch batch;
-    MemTable* mem = new MemTable(icmp_);
+    MemTable *mem = new MemTable(icmp_);
     mem->Ref();
     int counter = 0;
     while (reader.ReadRecord(&record, &scratch)) {
       if (record.size() < 12) {
         reporter.Corruption(
-            record.size(), Status::Corruption("log record too small"));
+          record.size(), Status::Corruption("log record too small"));
         continue;
       }
       WriteBatchInternal::SetContents(&batch, record);
@@ -3233,8 +3251,8 @@ class Repairer {
         counter += WriteBatchInternal::Count(&batch);
       } else {
         Log(options_.info_log, "Log #%llu: ignoring %s",
-            (unsigned long long) log,
-            status.ToString().c_str());
+          (unsigned long long) log,
+          status.ToString().c_str());
         status = Status::OK();  // Keep going with rest of file
       }
     }
@@ -3244,7 +3262,7 @@ class Repairer {
     // since ExtractMetaData() will also generate edits.
     FileMetaData meta;
     meta.number = next_file_number_++;
-    Iterator* iter = mem->NewIterator();
+    Iterator *iter = mem->NewIterator();
     status = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta);
     delete iter;
     mem->Unref();
@@ -3255,10 +3273,10 @@ class Repairer {
       }
     }
     Log(options_.info_log, "Log #%llu: %d ops saved to Table #%llu %s",
-        (unsigned long long) log,
-        counter,
-        (unsigned long long) meta.number,
-        status.ToString().c_str());
+      (unsigned long long) log,
+      counter,
+      (unsigned long long) meta.number,
+      status.ToString().c_str());
     return status;
   }
 
@@ -3268,7 +3286,7 @@ class Repairer {
     }
   }
 
-  Iterator* NewTableIterator(const FileMetaData& meta) {
+  Iterator *NewTableIterator(const FileMetaData &meta) {
     // Same as compaction iterators: if paranoid_checks are on, turn
     // on checksum verification.
     ReadOptions r;
@@ -3293,14 +3311,14 @@ class Repairer {
       ArchiveFile(TableFileName(dbname_, number));
       ArchiveFile(SSTTableFileName(dbname_, number));
       Log(options_.info_log, "Table #%llu: dropped: %s",
-          (unsigned long long) t.meta.number,
-          status.ToString().c_str());
+        (unsigned long long) t.meta.number,
+        status.ToString().c_str());
       return;
     }
 
     // Extract metadata by scanning through table.
     int counter = 0;
-    Iterator* iter = NewTableIterator(t.meta);
+    Iterator *iter = NewTableIterator(t.meta);
     bool empty = true;
     ParsedInternalKey parsed;
     t.max_sequence = 0;
@@ -3308,8 +3326,8 @@ class Repairer {
       Slice key = iter->key();
       if (!ParseInternalKey(key, &parsed)) {
         Log(options_.info_log, "Table #%llu: unparsable key %s",
-            (unsigned long long) t.meta.number,
-            EscapeString(key).c_str());
+          (unsigned long long) t.meta.number,
+          EscapeString(key).c_str());
         continue;
       }
 
@@ -3328,9 +3346,9 @@ class Repairer {
     }
     delete iter;
     Log(options_.info_log, "Table #%llu: %d entries %s",
-        (unsigned long long) t.meta.number,
-        counter,
-        status.ToString().c_str());
+      (unsigned long long) t.meta.number,
+      counter,
+      status.ToString().c_str());
 
     if (status.ok()) {
       tables_.push_back(t);
@@ -3339,21 +3357,21 @@ class Repairer {
     }
   }
 
-  void RepairTable(const std::string& src, TableInfo t) {
+  void RepairTable(const std::string &src, TableInfo t) {
     // We will copy src contents to a new table and then rename the
     // new table over the source.
 
     // Create builder.
     std::string copy = TableFileName(dbname_, next_file_number_++);
-    WritableFile* file;
+    WritableFile *file;
     Status s = env_->NewWritableFile(copy, &file);
     if (!s.ok()) {
       return;
     }
-    TableBuilder* builder = new TableBuilder(options_, file);
+    TableBuilder *builder = new TableBuilder(options_, file);
 
     // Copy data.
-    Iterator* iter = NewTableIterator(t.meta);
+    Iterator *iter = NewTableIterator(t.meta);
     int counter = 0;
     for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
       builder->Add(iter->key(), iter->value());
@@ -3384,7 +3402,7 @@ class Repairer {
       s = env_->RenameFile(copy, orig);
       if (s.ok()) {
         Log(options_.info_log, "Table #%llu: %d entries repaired",
-            (unsigned long long) t.meta.number, counter);
+          (unsigned long long) t.meta.number, counter);
         tables_.push_back(t);
       }
     }
@@ -3395,7 +3413,7 @@ class Repairer {
 
   Status WriteDescriptor() {
     std::string tmp = TempFileName(dbname_, 1);
-    WritableFile* file;
+    WritableFile *file;
     Status status = env_->NewWritableFile(tmp, &file);
     if (!status.ok()) {
       return status;
@@ -3415,9 +3433,9 @@ class Repairer {
 
     for (size_t i = 0; i < tables_.size(); i++) {
       // TODO(opt): separate out into multiple levels
-      const TableInfo& t = tables_[i];
+      const TableInfo &t = tables_[i];
       edit_.AddFile(0, t.meta.number, t.meta.file_size,
-                    t.meta.smallest, t.meta.largest);
+        t.meta.smallest, t.meta.largest);
     }
 
     //fprintf(stderr, "NewDescriptor:\n%s\n", edit_.DebugString().c_str());
@@ -3452,12 +3470,12 @@ class Repairer {
     return status;
   }
 
-  void ArchiveFile(const std::string& fname) {
+  void ArchiveFile(const std::string &fname) {
     // Move into another directory.  E.g., for
     //    dir/foo
     // rename to
     //    dir/lost/foo
-    const char* slash = strrchr(fname.c_str(), '/');
+    const char *slash = strrchr(fname.c_str(), '/');
     std::string new_dir;
     if (slash != NULL) {
       new_dir.assign(fname.data(), slash - fname.data());
@@ -3469,12 +3487,12 @@ class Repairer {
     new_file.append((slash == NULL) ? fname.c_str() : slash + 1);
     Status s = env_->RenameFile(fname, new_file);
     Log(options_.info_log, "Archiving %s: %s\n",
-        fname.c_str(), s.ToString().c_str());
+      fname.c_str(), s.ToString().c_str());
   }
 };
 }  // namespace
 
-DLLX Status RepairDB(const std::string& dbname, const Options& options) {
+DLLX Status RepairDB(const std::string &dbname, const Options &options) {
   Repairer repairer(dbname, options);
   return repairer.Run();
 }
@@ -3484,38 +3502,37 @@ DLLX Status RepairDB(const std::string& dbname, const Options& options) {
 // ----------------------------------------------------------------------------
 
 struct TableAndFile {
-  RandomAccessFile* file;
-  Table* table;
+  RandomAccessFile *file;
+  Table *table;
 };
 
-static void DeleteEntry(const Slice& key, void* value) {
-  TableAndFile* tf = reinterpret_cast<TableAndFile*>(value);
+static void DeleteEntry(const Slice &key, void *value) {
+  TableAndFile *tf = reinterpret_cast<TableAndFile *>(value);
   delete tf->table;
   delete tf->file;
   delete tf;
 }
 
-static void UnrefEntry(void* arg1, void* arg2) {
-  Cache* cache = reinterpret_cast<Cache*>(arg1);
-  Cache::Handle* h = reinterpret_cast<Cache::Handle*>(arg2);
+static void UnrefEntry(void *arg1, void *arg2) {
+  Cache *cache = reinterpret_cast<Cache *>(arg1);
+  Cache::Handle *h = reinterpret_cast<Cache::Handle *>(arg2);
   cache->Release(h);
 }
 
-TableCache::TableCache(const std::string& dbname,
-                       const Options* options,
-                       int entries)
-    : env_(options->env),
-      dbname_(dbname),
-      options_(options),
-      cache_(NewLRUCache(entries)) {
-}
+TableCache::TableCache(const std::string &dbname,
+  const Options *options,
+  int entries)
+  : env_(options->env),
+  dbname_(dbname),
+  options_(options),
+  cache_(NewLRUCache(entries)) {}
 
 TableCache::~TableCache() {
   delete cache_;
 }
 
 Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
-                             Cache::Handle** handle) {
+  Cache::Handle **handle) {
   Status s;
   char buf[sizeof(file_number)];
   EncodeFixed64(buf, file_number);
@@ -3523,8 +3540,8 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
   *handle = cache_->Lookup(key);
   if (*handle == NULL) {
     std::string fname = TableFileName(dbname_, file_number);
-    RandomAccessFile* file = NULL;
-    Table* table = NULL;
+    RandomAccessFile *file = NULL;
+    Table *table = NULL;
     s = env_->NewRandomAccessFile(fname, &file);
     if (!s.ok()) {
       std::string old_fname = SSTTableFileName(dbname_, file_number);
@@ -3542,7 +3559,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
       // We do not cache error results so that if the error is transient,
       // or somebody repairs the file, we recover automatically.
     } else {
-      TableAndFile* tf = new TableAndFile;
+      TableAndFile *tf = new TableAndFile;
       tf->file = file;
       tf->table = table;
       *handle = cache_->Insert(key, tf, 1, &DeleteEntry);
@@ -3551,22 +3568,22 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
   return s;
 }
 
-Iterator* TableCache::NewIterator(const ReadOptions& options,
-                                  uint64_t file_number,
-                                  uint64_t file_size,
-                                  Table** tableptr) {
+Iterator *TableCache::NewIterator(const ReadOptions &options,
+  uint64_t file_number,
+  uint64_t file_size,
+  Table **tableptr) {
   if (tableptr != NULL) {
     *tableptr = NULL;
   }
 
-  Cache::Handle* handle = NULL;
+  Cache::Handle *handle = NULL;
   Status s = FindTable(file_number, file_size, &handle);
   if (!s.ok()) {
     return NewErrorIterator(s);
   }
 
-  Table* table = reinterpret_cast<TableAndFile*>(cache_->Value(handle))->table;
-  Iterator* result = table->NewIterator(options);
+  Table *table = reinterpret_cast<TableAndFile *>(cache_->Value(handle))->table;
+  Iterator *result = table->NewIterator(options);
   result->RegisterCleanup(&UnrefEntry, cache_, handle);
   if (tableptr != NULL) {
     *tableptr = table;
@@ -3574,16 +3591,16 @@ Iterator* TableCache::NewIterator(const ReadOptions& options,
   return result;
 }
 
-Status TableCache::Get(const ReadOptions& options,
-                       uint64_t file_number,
-                       uint64_t file_size,
-                       const Slice& k,
-                       void* arg,
-                       void (*saver)(void*, const Slice&, const Slice&)) {
-  Cache::Handle* handle = NULL;
+Status TableCache::Get(const ReadOptions &options,
+  uint64_t file_number,
+  uint64_t file_size,
+  const Slice &k,
+  void *arg,
+  void (*saver)(void *, const Slice &, const Slice &)) {
+  Cache::Handle *handle = NULL;
   Status s = FindTable(file_number, file_size, &handle);
   if (s.ok()) {
-    Table* t = reinterpret_cast<TableAndFile*>(cache_->Value(handle))->table;
+    Table *t = reinterpret_cast<TableAndFile *>(cache_->Value(handle))->table;
     s = t->InternalGet(options, k, arg, saver);
     cache_->Release(handle);
   }
@@ -3603,15 +3620,15 @@ void TableCache::Evict(uint64_t file_number) {
 // Tag numbers for serialized VersionEdit.  These numbers are written to
 // disk and should not be changed.
 enum Tag {
-  kComparator           = 1,
-  kLogNumber            = 2,
-  kNextFileNumber       = 3,
-  kLastSequence         = 4,
-  kCompactPointer       = 5,
-  kDeletedFile          = 6,
-  kNewFile              = 7,
+  kComparator = 1,
+  kLogNumber = 2,
+  kNextFileNumber = 3,
+  kLastSequence = 4,
+  kCompactPointer = 5,
+  kDeletedFile = 6,
+  kNewFile = 7,
   // 8 was used for large value refs
-  kPrevLogNumber        = 9
+  kPrevLogNumber = 9
 };
 
 void VersionEdit::Clear() {
@@ -3629,7 +3646,7 @@ void VersionEdit::Clear() {
   new_files_.clear();
 }
 
-void VersionEdit::EncodeTo(std::string* dst) const {
+void VersionEdit::EncodeTo(std::string *dst) const {
   if (has_comparator_) {
     PutVarint32(dst, kComparator);
     PutLengthPrefixedSlice(dst, comparator_);
@@ -3658,15 +3675,15 @@ void VersionEdit::EncodeTo(std::string* dst) const {
   }
 
   for (DeletedFileSet::const_iterator iter = deleted_files_.begin();
-       iter != deleted_files_.end();
-       ++iter) {
+    iter != deleted_files_.end();
+    ++iter) {
     PutVarint32(dst, kDeletedFile);
     PutVarint32(dst, iter->first);   // level
     PutVarint64(dst, iter->second);  // file number
   }
 
   for (size_t i = 0; i < new_files_.size(); i++) {
-    const FileMetaData& f = new_files_[i].second;
+    const FileMetaData &f = new_files_[i].second;
     PutVarint32(dst, kNewFile);
     PutVarint32(dst, new_files_[i].first);  // level
     PutVarint64(dst, f.number);
@@ -3676,7 +3693,7 @@ void VersionEdit::EncodeTo(std::string* dst) const {
   }
 }
 
-static bool GetInternalKey(Slice* input, InternalKey* dst) {
+static bool GetInternalKey(Slice *input, InternalKey *dst) {
   Slice str;
   if (GetLengthPrefixedSlice(input, &str)) {
     dst->DecodeFrom(str);
@@ -3686,10 +3703,10 @@ static bool GetInternalKey(Slice* input, InternalKey* dst) {
   }
 }
 
-static bool GetLevel(Slice* input, int* level) {
+static bool GetLevel(Slice *input, int *level) {
   uint32_t v;
   if (GetVarint32(input, &v) &&
-      v < config::kNumLevels) {
+    v < config::kNumLevels) {
     *level = v;
     return true;
   } else {
@@ -3697,10 +3714,10 @@ static bool GetLevel(Slice* input, int* level) {
   }
 }
 
-Status VersionEdit::DecodeFrom(const Slice& src) {
+Status VersionEdit::DecodeFrom(const Slice &src) {
   Clear();
   Slice input = src;
-  const char* msg = NULL;
+  const char *msg = NULL;
   uint32_t tag;
 
   // Temporary storage for parsing
@@ -3755,7 +3772,7 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
 
       case kCompactPointer:
         if (GetLevel(&input, &level) &&
-            GetInternalKey(&input, &key)) {
+          GetInternalKey(&input, &key)) {
           compact_pointers_.push_back(std::make_pair(level, key));
         } else {
           msg = "compaction pointer";
@@ -3764,7 +3781,7 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
 
       case kDeletedFile:
         if (GetLevel(&input, &level) &&
-            GetVarint64(&input, &number)) {
+          GetVarint64(&input, &number)) {
           deleted_files_.insert(std::make_pair(level, number));
         } else {
           msg = "deleted file";
@@ -3773,10 +3790,10 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
 
       case kNewFile:
         if (GetLevel(&input, &level) &&
-            GetVarint64(&input, &f.number) &&
-            GetVarint64(&input, &f.file_size) &&
-            GetInternalKey(&input, &f.smallest) &&
-            GetInternalKey(&input, &f.largest)) {
+          GetVarint64(&input, &f.number) &&
+          GetVarint64(&input, &f.file_size) &&
+          GetInternalKey(&input, &f.smallest) &&
+          GetInternalKey(&input, &f.largest)) {
           new_files_.push_back(std::make_pair(level, f));
         } else {
           msg = "new-file entry";
@@ -3830,15 +3847,15 @@ std::string VersionEdit::DebugString() const {
     r.append(compact_pointers_[i].second.DebugString());
   }
   for (DeletedFileSet::const_iterator iter = deleted_files_.begin();
-       iter != deleted_files_.end();
-       ++iter) {
+    iter != deleted_files_.end();
+    ++iter) {
     r.append("\n  DeleteFile: ");
     AppendNumberTo(&r, iter->first);
     r.append(" ");
     AppendNumberTo(&r, iter->second);
   }
   for (size_t i = 0; i < new_files_.size(); i++) {
-    const FileMetaData& f = new_files_[i].second;
+    const FileMetaData &f = new_files_[i].second;
     r.append("\n  AddFile: ");
     AppendNumberTo(&r, new_files_[i].first);
     r.append(" ");
@@ -3858,24 +3875,24 @@ std::string VersionEdit::DebugString() const {
 // - db/version_set.cc
 // ----------------------------------------------------------------------------
 
-static int TargetFileSize(const Options* options) {
+static int TargetFileSize(const Options *options) {
   return options->max_file_size;
 }
 
 // Maximum bytes of overlaps in grandparent (i.e., level+2) before we
 // stop building a single file in a level->level+1 compaction.
-static int64_t MaxGrandParentOverlapBytes(const Options* options) {
+static int64_t MaxGrandParentOverlapBytes(const Options *options) {
   return 10 * TargetFileSize(options);
 }
 
 // Maximum number of bytes in all compacted files.  We avoid expanding
 // the lower level file set of a compaction if it would make the
 // total compaction cover more than this many bytes.
-static int64_t ExpandedCompactionByteSizeLimit(const Options* options) {
+static int64_t ExpandedCompactionByteSizeLimit(const Options *options) {
   return 25 * TargetFileSize(options);
 }
 
-static double MaxBytesForLevel(const Options* options, int level) {
+static double MaxBytesForLevel(const Options *options, int level) {
   // Note: the result for level zero is not really used since we set
   // the level-0 compaction threshold based on number of files.
 
@@ -3888,12 +3905,12 @@ static double MaxBytesForLevel(const Options* options, int level) {
   return result;
 }
 
-static uint64_t MaxFileSizeForLevel(const Options* options, int level) {
+static uint64_t MaxFileSizeForLevel(const Options *options, int level) {
   // We could vary per level to reduce number of files?
   return TargetFileSize(options);
 }
 
-static int64_t TotalFileSize(const std::vector<FileMetaData*>& files) {
+static int64_t TotalFileSize(const std::vector<FileMetaData *> &files) {
   int64_t sum = 0;
   for (size_t i = 0; i < files.size(); i++) {
     sum += files[i]->file_size;
@@ -3911,7 +3928,7 @@ Version::~Version() {
   // Drop references to files
   for (int level = 0; level < config::kNumLevels; level++) {
     for (size_t i = 0; i < files_[level].size(); i++) {
-      FileMetaData* f = files_[level][i];
+      FileMetaData *f = files_[level][i];
       assert(f->refs > 0);
       f->refs--;
       if (f->refs <= 0) {
@@ -3921,14 +3938,14 @@ Version::~Version() {
   }
 }
 
-int FindFile(const InternalKeyComparator& icmp,
-             const std::vector<FileMetaData*>& files,
-             const Slice& key) {
+int FindFile(const InternalKeyComparator &icmp,
+  const std::vector<FileMetaData *> &files,
+  const Slice &key) {
   uint32_t left = 0;
   uint32_t right = (uint32_t)files.size();
   while (left < right) {
     uint32_t mid = (left + right) / 2;
-    const FileMetaData* f = files[mid];
+    const FileMetaData *f = files[mid];
     if (icmp.InternalKeyComparator::Compare(f->largest.Encode(), key) < 0) {
       // Key at "mid.largest" is < "target".  Therefore all
       // files at or before "mid" are uninteresting.
@@ -3942,33 +3959,33 @@ int FindFile(const InternalKeyComparator& icmp,
   return right;
 }
 
-static bool AfterFile(const Comparator* ucmp,
-                      const Slice* user_key, const FileMetaData* f) {
+static bool AfterFile(const Comparator *ucmp,
+  const Slice *user_key, const FileMetaData *f) {
   // NULL user_key occurs before all keys and is therefore never after *f
   return (user_key != NULL &&
-          ucmp->Compare(*user_key, f->largest.user_key()) > 0);
+    ucmp->Compare(*user_key, f->largest.user_key()) > 0);
 }
 
-static bool BeforeFile(const Comparator* ucmp,
-                       const Slice* user_key, const FileMetaData* f) {
+static bool BeforeFile(const Comparator *ucmp,
+  const Slice *user_key, const FileMetaData *f) {
   // NULL user_key occurs after all keys and is therefore never before *f
   return (user_key != NULL &&
-          ucmp->Compare(*user_key, f->smallest.user_key()) < 0);
+    ucmp->Compare(*user_key, f->smallest.user_key()) < 0);
 }
 
 bool SomeFileOverlapsRange(
-    const InternalKeyComparator& icmp,
-    bool disjoint_sorted_files,
-    const std::vector<FileMetaData*>& files,
-    const Slice* smallest_user_key,
-    const Slice* largest_user_key) {
-  const Comparator* ucmp = icmp.user_comparator();
+  const InternalKeyComparator &icmp,
+  bool disjoint_sorted_files,
+  const std::vector<FileMetaData *> &files,
+  const Slice *smallest_user_key,
+  const Slice *largest_user_key) {
+  const Comparator *ucmp = icmp.user_comparator();
   if (!disjoint_sorted_files) {
     // Need to check against all files
     for (size_t i = 0; i < files.size(); i++) {
-      const FileMetaData* f = files[i];
+      const FileMetaData *f = files[i];
       if (AfterFile(ucmp, smallest_user_key, f) ||
-          BeforeFile(ucmp, largest_user_key, f)) {
+        BeforeFile(ucmp, largest_user_key, f)) {
         // No overlap
       } else {
         return true;  // Overlap
@@ -3981,7 +3998,7 @@ bool SomeFileOverlapsRange(
   uint32_t index = 0;
   if (smallest_user_key != NULL) {
     // Find the earliest possible internal key for smallest_user_key
-    InternalKey small(*smallest_user_key, kMaxSequenceNumber,kValueTypeForSeek);
+    InternalKey small(*smallest_user_key, kMaxSequenceNumber, kValueTypeForSeek);
     index = FindFile(icmp, files, small.Encode());
   }
 
@@ -3998,21 +4015,23 @@ bool SomeFileOverlapsRange(
 // is the largest key that occurs in the file, and value() is an
 // 16-byte value containing the file number and file size, both
 // encoded using EncodeFixed64.
-class Version::LevelFileNumIterator : public Iterator {
- public:
-  LevelFileNumIterator(const InternalKeyComparator& icmp,
-                       const std::vector<FileMetaData*>* flist)
-      : icmp_(icmp),
-        flist_(flist),
-        index_((unsigned int)flist->size()) {        // Marks as invalid
+class Version::LevelFileNumIterator: public Iterator {
+public:
+  LevelFileNumIterator(const InternalKeyComparator &icmp,
+    const std::vector<FileMetaData *> *flist)
+    : icmp_(icmp),
+    flist_(flist),
+    index_((unsigned int)flist->size()) {        // Marks as invalid
   }
   virtual bool Valid() const {
     return index_ < flist_->size();
   }
-  virtual void Seek(const Slice& target) {
+  virtual void Seek(const Slice &target) {
     index_ = FindFile(icmp_, *flist_, target);
   }
-  virtual void SeekToFirst() { index_ = 0; }
+  virtual void SeekToFirst() {
+    index_ = 0;
+  }
   virtual void SeekToLast() {
     index_ = flist_->empty() ? 0 : (unsigned int)(flist_->size() - 1);
   }
@@ -4023,7 +4042,7 @@ class Version::LevelFileNumIterator : public Iterator {
   virtual void Prev() {
     assert(Valid());
     if (index_ == 0) {
-        index_ = (uint32_t)flist_->size();  // Marks as invalid
+      index_ = (uint32_t)flist_->size();  // Marks as invalid
     } else {
       index_--;
     }
@@ -4035,47 +4054,49 @@ class Version::LevelFileNumIterator : public Iterator {
   Slice value() const {
     assert(Valid());
     EncodeFixed64(value_buf_, (*flist_)[index_]->number);
-    EncodeFixed64(value_buf_+8, (*flist_)[index_]->file_size);
+    EncodeFixed64(value_buf_ + 8, (*flist_)[index_]->file_size);
     return Slice(value_buf_, sizeof(value_buf_));
   }
-  virtual Status status() const { return Status::OK(); }
- private:
+  virtual Status status() const {
+    return Status::OK();
+  }
+private:
   const InternalKeyComparator icmp_;
-  const std::vector<FileMetaData*>* const flist_;
+  const std::vector<FileMetaData *> *const flist_;
   uint32_t index_;
 
   // Backing store for value().  Holds the file number and size.
   mutable char value_buf_[16];
 };
 
-static Iterator* GetFileIterator(void* arg,
-                                 const ReadOptions& options,
-                                 const Slice& file_value) {
-  TableCache* cache = reinterpret_cast<TableCache*>(arg);
+static Iterator *GetFileIterator(void *arg,
+  const ReadOptions &options,
+  const Slice &file_value) {
+  TableCache *cache = reinterpret_cast<TableCache *>(arg);
   if (file_value.size() != 16) {
     return NewErrorIterator(
-        Status::Corruption("FileReader invoked with unexpected value"));
+      Status::Corruption("FileReader invoked with unexpected value"));
   } else {
     return cache->NewIterator(options,
-                              DecodeFixed64(file_value.data()),
-                              DecodeFixed64(file_value.data() + 8));
+      DecodeFixed64(file_value.data()),
+      DecodeFixed64(file_value.data() + 8));
   }
 }
 
-Iterator* Version::NewConcatenatingIterator(const ReadOptions& options,
-                                            int level) const {
+Iterator *Version::NewConcatenatingIterator(const ReadOptions &options,
+  int level) const {
   return NewTwoLevelIterator(
-      new LevelFileNumIterator(vset_->icmp_, &files_[level]),
-      &GetFileIterator, vset_->table_cache_, options);
+    new LevelFileNumIterator(vset_->icmp_, &files_[level]),
+    &GetFileIterator, vset_->table_cache_, options);
 }
 
-void Version::AddIterators(const ReadOptions& options,
-                           std::vector<Iterator*>* iters) {
+void Version::AddIterators(const ReadOptions &options,
+  std::vector<Iterator *> *iters) {
   // Merge all level zero files together since they may overlap
   for (size_t i = 0; i < files_[0].size(); i++) {
     iters->push_back(
-        vset_->table_cache_->NewIterator(
-            options, files_[0][i]->number, files_[0][i]->file_size));
+      vset_->table_cache_->NewIterator(
+        options, files_[0][i]->number, files_[0][i]->file_size));
   }
 
   // For levels > 0, we can use a concatenating iterator that sequentially
@@ -4098,13 +4119,13 @@ enum SaverState {
 };
 struct Saver {
   SaverState state;
-  const Comparator* ucmp;
+  const Comparator *ucmp;
   Slice user_key;
-  std::string* value;
+  std::string *value;
 };
 }
-static void SaveValue(void* arg, const Slice& ikey, const Slice& v) {
-  Saver* s = reinterpret_cast<Saver*>(arg);
+static void SaveValue(void *arg, const Slice &ikey, const Slice &v) {
+  Saver *s = reinterpret_cast<Saver *>(arg);
   ParsedInternalKey parsed_key;
   if (!ParseInternalKey(ikey, &parsed_key)) {
     s->state = kCorrupt;
@@ -4118,23 +4139,23 @@ static void SaveValue(void* arg, const Slice& ikey, const Slice& v) {
   }
 }
 
-static bool NewestFirst(FileMetaData* a, FileMetaData* b) {
+static bool NewestFirst(FileMetaData *a, FileMetaData *b) {
   return a->number > b->number;
 }
 
 void Version::ForEachOverlapping(Slice user_key, Slice internal_key,
-                                 void* arg,
-                                 bool (*func)(void*, int, FileMetaData*)) {
+  void *arg,
+  bool (*func)(void *, int, FileMetaData *)) {
   // TODO(sanjay): Change Version::Get() to use this function.
-  const Comparator* ucmp = vset_->icmp_.user_comparator();
+  const Comparator *ucmp = vset_->icmp_.user_comparator();
 
   // Search level-0 in order from newest to oldest.
-  std::vector<FileMetaData*> tmp;
+  std::vector<FileMetaData *> tmp;
   tmp.reserve(files_[0].size());
   for (uint32_t i = 0; i < files_[0].size(); i++) {
-    FileMetaData* f = files_[0][i];
+    FileMetaData *f = files_[0][i];
     if (ucmp->Compare(user_key, f->smallest.user_key()) >= 0 &&
-        ucmp->Compare(user_key, f->largest.user_key()) <= 0) {
+      ucmp->Compare(user_key, f->largest.user_key()) <= 0) {
       tmp.push_back(f);
     }
   }
@@ -4155,7 +4176,7 @@ void Version::ForEachOverlapping(Slice user_key, Slice internal_key,
     // Binary search to find earliest index whose largest key >= internal_key.
     uint32_t index = FindFile(vset_->icmp_, files_[level], internal_key);
     if (index < num_files) {
-      FileMetaData* f = files_[level][index];
+      FileMetaData *f = files_[level][index];
       if (ucmp->Compare(user_key, f->smallest.user_key()) < 0) {
         // All of "f" is past any data for user_key
       } else {
@@ -4167,39 +4188,39 @@ void Version::ForEachOverlapping(Slice user_key, Slice internal_key,
   }
 }
 
-Status Version::Get(const ReadOptions& options,
-                    const LookupKey& k,
-                    std::string* value,
-                    GetStats* stats) {
+Status Version::Get(const ReadOptions &options,
+  const LookupKey &k,
+  std::string *value,
+  GetStats *stats) {
   Slice ikey = k.internal_key();
   Slice user_key = k.user_key();
-  const Comparator* ucmp = vset_->icmp_.user_comparator();
+  const Comparator *ucmp = vset_->icmp_.user_comparator();
   Status s;
 
   stats->seek_file = NULL;
   stats->seek_file_level = -1;
-  FileMetaData* last_file_read = NULL;
+  FileMetaData *last_file_read = NULL;
   int last_file_read_level = -1;
 
   // We can search level-by-level since entries never hop across
   // levels.  Therefore we are guaranteed that if we find data
   // in an smaller level, later levels are irrelevant.
-  std::vector<FileMetaData*> tmp;
-  FileMetaData* tmp2;
+  std::vector<FileMetaData *> tmp;
+  FileMetaData *tmp2;
   for (int level = 0; level < config::kNumLevels; level++) {
     size_t num_files = files_[level].size();
     if (num_files == 0) continue;
 
     // Get the list of files to search in this level
-    FileMetaData* const* files = &files_[level][0];
+    FileMetaData *const *files = &files_[level][0];
     if (level == 0) {
       // Level-0 files may overlap each other.  Find all files that
       // overlap user_key and process them in order from newest to oldest.
       tmp.reserve(num_files);
       for (uint32_t i = 0; i < num_files; i++) {
-        FileMetaData* f = files[i];
+        FileMetaData *f = files[i];
         if (ucmp->Compare(user_key, f->smallest.user_key()) >= 0 &&
-            ucmp->Compare(user_key, f->largest.user_key()) <= 0) {
+          ucmp->Compare(user_key, f->largest.user_key()) <= 0) {
           tmp.push_back(f);
         }
       }
@@ -4234,7 +4255,7 @@ Status Version::Get(const ReadOptions& options,
         stats->seek_file_level = last_file_read_level;
       }
 
-      FileMetaData* f = files[i];
+      FileMetaData *f = files[i];
       last_file_read = f;
       last_file_read_level = level;
 
@@ -4244,7 +4265,7 @@ Status Version::Get(const ReadOptions& options,
       saver.user_key = user_key;
       saver.value = value;
       s = vset_->table_cache_->Get(options, f->number, f->file_size,
-                                   ikey, &saver, SaveValue);
+        ikey, &saver, SaveValue);
       if (!s.ok()) {
         return s;
       }
@@ -4266,8 +4287,8 @@ Status Version::Get(const ReadOptions& options,
   return Status::NotFound(Slice());  // Use an empty error message for speed
 }
 
-bool Version::UpdateStats(const GetStats& stats) {
-  FileMetaData* f = stats.seek_file;
+bool Version::UpdateStats(const GetStats &stats) {
+  FileMetaData *f = stats.seek_file;
   if (f != NULL) {
     f->allowed_seeks--;
     if (f->allowed_seeks <= 0 && file_to_compact_ == NULL) {
@@ -4289,8 +4310,8 @@ bool Version::RecordReadSample(Slice internal_key) {
     GetStats stats;  // Holds first matching file
     int matches;
 
-    static bool Match(void* arg, int level, FileMetaData* f) {
-      State* state = reinterpret_cast<State*>(arg);
+    static bool Match(void *arg, int level, FileMetaData *f) {
+      State *state = reinterpret_cast<State *>(arg);
       state->matches++;
       if (state->matches == 1) {
         // Remember first match.
@@ -4331,22 +4352,22 @@ void Version::Unref() {
 }
 
 bool Version::OverlapInLevel(int level,
-                             const Slice* smallest_user_key,
-                             const Slice* largest_user_key) {
+  const Slice *smallest_user_key,
+  const Slice *largest_user_key) {
   return SomeFileOverlapsRange(vset_->icmp_, (level > 0), files_[level],
-                               smallest_user_key, largest_user_key);
+    smallest_user_key, largest_user_key);
 }
 
 int Version::PickLevelForMemTableOutput(
-    const Slice& smallest_user_key,
-    const Slice& largest_user_key) {
+  const Slice &smallest_user_key,
+  const Slice &largest_user_key) {
   int level = 0;
   if (!OverlapInLevel(0, &smallest_user_key, &largest_user_key)) {
     // Push to next level if there is no overlap in next level,
     // and the #bytes overlapping in the level after that are limited.
     InternalKey start(smallest_user_key, kMaxSequenceNumber, kValueTypeForSeek);
     InternalKey limit(largest_user_key, 0, static_cast<ValueType>(0));
-    std::vector<FileMetaData*> overlaps;
+    std::vector<FileMetaData *> overlaps;
     while (level < config::kMaxMemCompactLevel) {
       if (OverlapInLevel(level + 1, &smallest_user_key, &largest_user_key)) {
         break;
@@ -4367,10 +4388,10 @@ int Version::PickLevelForMemTableOutput(
 
 // Store in "*inputs" all files in "level" that overlap [begin,end]
 void Version::GetOverlappingInputs(
-    int level,
-    const InternalKey* begin,
-    const InternalKey* end,
-    std::vector<FileMetaData*>* inputs) {
+  int level,
+  const InternalKey *begin,
+  const InternalKey *end,
+  std::vector<FileMetaData *> *inputs) {
   assert(level >= 0);
   assert(level < config::kNumLevels);
   inputs->clear();
@@ -4381,9 +4402,9 @@ void Version::GetOverlappingInputs(
   if (end != NULL) {
     user_end = end->user_key();
   }
-  const Comparator* user_cmp = vset_->icmp_.user_comparator();
+  const Comparator *user_cmp = vset_->icmp_.user_comparator();
   for (size_t i = 0; i < files_[level].size(); ) {
-    FileMetaData* f = files_[level][i++];
+    FileMetaData *f = files_[level][i++];
     const Slice file_start = f->smallest.user_key();
     const Slice file_limit = f->largest.user_key();
     if (begin != NULL && user_cmp->Compare(file_limit, user_begin) < 0) {
@@ -4419,7 +4440,7 @@ std::string Version::DebugString() const {
     r.append("--- level ");
     AppendNumberTo(&r, level);
     r.append(" ---\n");
-    const std::vector<FileMetaData*>& files = files_[level];
+    const std::vector<FileMetaData *> &files = files_[level];
     for (size_t i = 0; i < files.size(); i++) {
       r.push_back(' ');
       AppendNumberTo(&r, files[i]->number);
@@ -4439,12 +4460,12 @@ std::string Version::DebugString() const {
 // of edits to a particular state without creating intermediate
 // Versions that contain full copies of the intermediate state.
 class VersionSet::Builder {
- private:
+private:
   // Helper to sort by v->files_[file_number].smallest
   struct BySmallestKey {
-    const InternalKeyComparator* internal_comparator;
+    const InternalKeyComparator *internal_comparator;
 
-    bool operator()(FileMetaData* f1, FileMetaData* f2) const {
+    bool operator()(FileMetaData *f1, FileMetaData *f2) const {
       int r = internal_comparator->Compare(f1->smallest, f2->smallest);
       if (r != 0) {
         return (r < 0);
@@ -4455,21 +4476,21 @@ class VersionSet::Builder {
     }
   };
 
-  typedef std::set<FileMetaData*, BySmallestKey> FileSet;
+  typedef std::set<FileMetaData *, BySmallestKey> FileSet;
   struct LevelState {
     std::set<uint64_t> deleted_files;
-    FileSet* added_files;
+    FileSet *added_files;
   };
 
-  VersionSet* vset_;
-  Version* base_;
+  VersionSet *vset_;
+  Version *base_;
   LevelState levels_[config::kNumLevels];
 
- public:
+public:
   // Initialize a builder with the files from *base and other info from *vset
-  Builder(VersionSet* vset, Version* base)
-      : vset_(vset),
-        base_(base) {
+  Builder(VersionSet *vset, Version *base)
+    : vset_(vset),
+    base_(base) {
     base_->Ref();
     BySmallestKey cmp;
     cmp.internal_comparator = &vset_->icmp_;
@@ -4480,16 +4501,16 @@ class VersionSet::Builder {
 
   ~Builder() {
     for (int level = 0; level < config::kNumLevels; level++) {
-      const FileSet* added = levels_[level].added_files;
-      std::vector<FileMetaData*> to_unref;
+      const FileSet *added = levels_[level].added_files;
+      std::vector<FileMetaData *> to_unref;
       to_unref.reserve(added->size());
       for (FileSet::const_iterator it = added->begin();
-          it != added->end(); ++it) {
+        it != added->end(); ++it) {
         to_unref.push_back(*it);
       }
       delete added;
       for (uint32_t i = 0; i < to_unref.size(); i++) {
-        FileMetaData* f = to_unref[i];
+        FileMetaData *f = to_unref[i];
         f->refs--;
         if (f->refs <= 0) {
           delete f;
@@ -4500,19 +4521,19 @@ class VersionSet::Builder {
   }
 
   // Apply all of the edits in *edit to the current state.
-  void Apply(VersionEdit* edit) {
+  void Apply(VersionEdit *edit) {
     // Update compaction pointers
     for (size_t i = 0; i < edit->compact_pointers_.size(); i++) {
       const int level = edit->compact_pointers_[i].first;
       vset_->compact_pointer_[level] =
-          edit->compact_pointers_[i].second.Encode().ToString();
+        edit->compact_pointers_[i].second.Encode().ToString();
     }
 
     // Delete files
-    const VersionEdit::DeletedFileSet& del = edit->deleted_files_;
+    const VersionEdit::DeletedFileSet &del = edit->deleted_files_;
     for (VersionEdit::DeletedFileSet::const_iterator iter = del.begin();
-         iter != del.end();
-         ++iter) {
+      iter != del.end();
+      ++iter) {
       const int level = iter->first;
       const uint64_t number = iter->second;
       levels_[level].deleted_files.insert(number);
@@ -4521,7 +4542,7 @@ class VersionSet::Builder {
     // Add new files
     for (size_t i = 0; i < edit->new_files_.size(); i++) {
       const int level = edit->new_files_[i].first;
-      FileMetaData* f = new FileMetaData(edit->new_files_[i].second);
+      FileMetaData *f = new FileMetaData(edit->new_files_[i].second);
       f->refs = 1;
 
       // We arrange to automatically compact this file after
@@ -4546,25 +4567,25 @@ class VersionSet::Builder {
   }
 
   // Save the current state in *v.
-  void SaveTo(Version* v) {
+  void SaveTo(Version *v) {
     BySmallestKey cmp;
     cmp.internal_comparator = &vset_->icmp_;
     for (int level = 0; level < config::kNumLevels; level++) {
       // Merge the set of added files with the set of pre-existing files.
       // Drop any deleted files.  Store the result in *v.
-      const std::vector<FileMetaData*>& base_files = base_->files_[level];
-      std::vector<FileMetaData*>::const_iterator base_iter = base_files.begin();
-      std::vector<FileMetaData*>::const_iterator base_end = base_files.end();
-      const FileSet* added = levels_[level].added_files;
+      const std::vector<FileMetaData *> &base_files = base_->files_[level];
+      std::vector<FileMetaData *>::const_iterator base_iter = base_files.begin();
+      std::vector<FileMetaData *>::const_iterator base_end = base_files.end();
+      const FileSet *added = levels_[level].added_files;
       v->files_[level].reserve(base_files.size() + added->size());
       for (FileSet::const_iterator added_iter = added->begin();
-           added_iter != added->end();
-           ++added_iter) {
+        added_iter != added->end();
+        ++added_iter) {
         // Add all smaller files listed in base_
-        for (std::vector<FileMetaData*>::const_iterator bpos
-                 = std::upper_bound(base_iter, base_end, *added_iter, cmp);
-             base_iter != bpos;
-             ++base_iter) {
+        for (std::vector<FileMetaData *>::const_iterator bpos
+          = std::upper_bound(base_iter, base_end, *added_iter, cmp);
+          base_iter != bpos;
+          ++base_iter) {
           MaybeAddFile(v, level, *base_iter);
         }
 
@@ -4580,12 +4601,12 @@ class VersionSet::Builder {
       // Make sure there is no overlap in levels > 0
       if (level > 0) {
         for (uint32_t i = 1; i < v->files_[level].size(); i++) {
-          const InternalKey& prev_end = v->files_[level][i-1]->largest;
-          const InternalKey& this_begin = v->files_[level][i]->smallest;
+          const InternalKey &prev_end = v->files_[level][i - 1]->largest;
+          const InternalKey &this_begin = v->files_[level][i]->smallest;
           if (vset_->icmp_.Compare(prev_end, this_begin) >= 0) {
             fprintf(stderr, "overlapping ranges in same level %s vs. %s\n",
-                    prev_end.DebugString().c_str(),
-                    this_begin.DebugString().c_str());
+              prev_end.DebugString().c_str(),
+              this_begin.DebugString().c_str());
             abort();
           }
         }
@@ -4594,15 +4615,15 @@ class VersionSet::Builder {
     }
   }
 
-  void MaybeAddFile(Version* v, int level, FileMetaData* f) {
+  void MaybeAddFile(Version *v, int level, FileMetaData *f) {
     if (levels_[level].deleted_files.count(f->number) > 0) {
       // File is deleted: do nothing
     } else {
-      std::vector<FileMetaData*>* files = &v->files_[level];
+      std::vector<FileMetaData *> *files = &v->files_[level];
       if (level > 0 && !files->empty()) {
         // Must not overlap
-        assert(vset_->icmp_.Compare((*files)[files->size()-1]->largest,
-                                    f->smallest) < 0);
+        assert(vset_->icmp_.Compare((*files)[files->size() - 1]->largest,
+          f->smallest) < 0);
       }
       f->refs++;
       files->push_back(f);
@@ -4610,24 +4631,24 @@ class VersionSet::Builder {
   }
 };
 
-VersionSet::VersionSet(const std::string& dbname,
-                       const Options* options,
-                       TableCache* table_cache,
-                       const InternalKeyComparator* cmp)
-    : env_(options->env),
-      dbname_(dbname),
-      options_(options),
-      table_cache_(table_cache),
-      icmp_(*cmp),
-      next_file_number_(2),
-      manifest_file_number_(0),  // Filled by Recover()
-      last_sequence_(0),
-      log_number_(0),
-      prev_log_number_(0),
-      descriptor_file_(NULL),
-      descriptor_log_(NULL),
-      dummy_versions_(this),
-      current_(NULL) {
+VersionSet::VersionSet(const std::string &dbname,
+  const Options *options,
+  TableCache *table_cache,
+  const InternalKeyComparator *cmp)
+  : env_(options->env),
+  dbname_(dbname),
+  options_(options),
+  table_cache_(table_cache),
+  icmp_(*cmp),
+  next_file_number_(2),
+  manifest_file_number_(0),  // Filled by Recover()
+  last_sequence_(0),
+  log_number_(0),
+  prev_log_number_(0),
+  descriptor_file_(NULL),
+  descriptor_log_(NULL),
+  dummy_versions_(this),
+  current_(NULL) {
   AppendVersion(new Version(this));
 }
 
@@ -4638,7 +4659,7 @@ VersionSet::~VersionSet() {
   delete descriptor_file_;
 }
 
-void VersionSet::AppendVersion(Version* v) {
+void VersionSet::AppendVersion(Version *v) {
   // Make "v" current
   assert(v->refs_ == 0);
   assert(v != current_);
@@ -4655,7 +4676,7 @@ void VersionSet::AppendVersion(Version* v) {
   v->next_->prev_ = v;
 }
 
-Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
+Status VersionSet::LogAndApply(VersionEdit *edit, port::Mutex *mu) {
   if (edit->has_log_number_) {
     assert(edit->log_number_ >= log_number_);
     assert(edit->log_number_ < next_file_number_);
@@ -4670,7 +4691,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
   edit->SetNextFile(next_file_number_);
   edit->SetLastSequence(last_sequence_);
 
-  Version* v = new Version(this);
+  Version *v = new Version(this);
   {
     Builder builder(this, current_);
     builder.Apply(edit);
@@ -4741,9 +4762,9 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
 }
 
 Status VersionSet::Recover(bool *save_manifest) {
-  struct LogReporter : public log::Reader::Reporter {
-    Status* status;
-    virtual void Corruption(size_t bytes, const Status& s) {
+  struct LogReporter: public log::Reader::Reporter {
+    Status *status;
+    virtual void Corruption(size_t bytes, const Status &s) {
       if (this->status->ok()) *this->status = s;
     }
   };
@@ -4767,12 +4788,12 @@ Status VersionSet::Recover(bool *save_manifest) {
   current.resize(size - resizeSize);
 
   std::string dscname = dbname_ + "/" + current;
-  SequentialFile* file;
+  SequentialFile *file;
   s = env_->NewSequentialFile(dscname, &file);
   if (!s.ok()) {
     if (s.IsNotFound()) {
       return Status::Corruption(
-            "CURRENT points to a non-existent file", s.ToString());
+        "CURRENT points to a non-existent file", s.ToString());
     }
     return s;
   }
@@ -4798,10 +4819,10 @@ Status VersionSet::Recover(bool *save_manifest) {
       s = edit.DecodeFrom(record);
       if (s.ok()) {
         if (edit.has_comparator_ &&
-            edit.comparator_ != icmp_.user_comparator()->Name()) {
+          edit.comparator_ != icmp_.user_comparator()->Name()) {
           s = Status::InvalidArgument(
-              edit.comparator_ + " does not match existing comparator ",
-              icmp_.user_comparator()->Name());
+            edit.comparator_ + " does not match existing comparator ",
+            icmp_.user_comparator()->Name());
         }
       }
 
@@ -4851,7 +4872,7 @@ Status VersionSet::Recover(bool *save_manifest) {
   }
 
   if (s.ok()) {
-    Version* v = new Version(this);
+    Version *v = new Version(this);
     builder.SaveTo(v);
     // Install recovered version
     Finalize(v);
@@ -4873,8 +4894,8 @@ Status VersionSet::Recover(bool *save_manifest) {
   return s;
 }
 
-bool VersionSet::ReuseManifest(const std::string& dscname,
-                               const std::string& dscbase) {
+bool VersionSet::ReuseManifest(const std::string &dscname,
+  const std::string &dscbase) {
   if (!options_->reuse_logs) {
     return false;
   }
@@ -4882,10 +4903,10 @@ bool VersionSet::ReuseManifest(const std::string& dscname,
   uint64_t manifest_number;
   uint64_t manifest_size = 0;
   if (!ParseFileName(dscbase, &manifest_number, &manifest_type) ||
-      manifest_type != kDescriptorFile ||
-      !env_->GetFileSize(dscname, &manifest_size).ok() ||
-      // Make new compacted MANIFEST if old one is too big
-      manifest_size >= TargetFileSize(options_)) {
+    manifest_type != kDescriptorFile ||
+    !env_->GetFileSize(dscname, &manifest_size).ok() ||
+    // Make new compacted MANIFEST if old one is too big
+    manifest_size >= TargetFileSize(options_)) {
     return false;
   }
 
@@ -4910,12 +4931,12 @@ void VersionSet::MarkFileNumberUsed(uint64_t number) {
   }
 }
 
-void VersionSet::Finalize(Version* v) {
+void VersionSet::Finalize(Version *v) {
   // Precomputed best level for next compaction
   int best_level = -1;
   double best_score = -1;
 
-  for (int level = 0; level < config::kNumLevels-1; level++) {
+  for (int level = 0; level < config::kNumLevels - 1; level++) {
     double score;
     if (level == 0) {
       // We treat level-0 specially by bounding the number of files
@@ -4930,12 +4951,12 @@ void VersionSet::Finalize(Version* v) {
       // setting, or very high compression ratios, or lots of
       // overwrites/deletions).
       score = v->files_[level].size() /
-          static_cast<double>(config::kL0_CompactionTrigger);
+        static_cast<double>(config::kL0_CompactionTrigger);
     } else {
       // Compute the ratio of current size to size limit.
       const uint64_t level_bytes = TotalFileSize(v->files_[level]);
       score =
-          static_cast<double>(level_bytes) / MaxBytesForLevel(options_, level);
+        static_cast<double>(level_bytes) / MaxBytesForLevel(options_, level);
     }
 
     if (score > best_score) {
@@ -4948,7 +4969,7 @@ void VersionSet::Finalize(Version* v) {
   v->compaction_score_ = best_score;
 }
 
-Status VersionSet::WriteSnapshot(log::Writer* log) {
+Status VersionSet::WriteSnapshot(log::Writer *log) {
   // TODO: Break up into multiple records to reduce memory usage on recovery?
 
   // Save metadata
@@ -4966,9 +4987,9 @@ Status VersionSet::WriteSnapshot(log::Writer* log) {
 
   // Save files
   for (int level = 0; level < config::kNumLevels; level++) {
-    const std::vector<FileMetaData*>& files = current_->files_[level];
+    const std::vector<FileMetaData *> &files = current_->files_[level];
     for (size_t i = 0; i < files.size(); i++) {
-      const FileMetaData* f = files[i];
+      const FileMetaData *f = files[i];
       edit.AddFile(level, f->number, f->file_size, f->smallest, f->largest);
     }
   }
@@ -4984,25 +5005,25 @@ int VersionSet::NumLevelFiles(int level) const {
   return (int)current_->files_[level].size();
 }
 
-const char* VersionSet::LevelSummary(LevelSummaryStorage* scratch) const {
+const char *VersionSet::LevelSummary(LevelSummaryStorage *scratch) const {
   // Update code if kNumLevels changes
   assert(config::kNumLevels == 7);
   snprintf(scratch->buffer, sizeof(scratch->buffer),
-           "files[ %d %d %d %d %d %d %d ]",
-           int(current_->files_[0].size()),
-           int(current_->files_[1].size()),
-           int(current_->files_[2].size()),
-           int(current_->files_[3].size()),
-           int(current_->files_[4].size()),
-           int(current_->files_[5].size()),
-           int(current_->files_[6].size()));
+    "files[ %d %d %d %d %d %d %d ]",
+    int(current_->files_[0].size()),
+    int(current_->files_[1].size()),
+    int(current_->files_[2].size()),
+    int(current_->files_[3].size()),
+    int(current_->files_[4].size()),
+    int(current_->files_[5].size()),
+    int(current_->files_[6].size()));
   return scratch->buffer;
 }
 
-uint64_t VersionSet::ApproximateOffsetOf(Version* v, const InternalKey& ikey) {
+uint64_t VersionSet::ApproximateOffsetOf(Version *v, const InternalKey &ikey) {
   uint64_t result = 0;
   for (int level = 0; level < config::kNumLevels; level++) {
-    const std::vector<FileMetaData*>& files = v->files_[level];
+    const std::vector<FileMetaData *> &files = v->files_[level];
     for (size_t i = 0; i < files.size(); i++) {
       if (icmp_.Compare(files[i]->largest, ikey) <= 0) {
         // Entire file is before "ikey", so just add the file size
@@ -5018,9 +5039,9 @@ uint64_t VersionSet::ApproximateOffsetOf(Version* v, const InternalKey& ikey) {
       } else {
         // "ikey" falls in the range for this table.  Add the
         // approximate offset of "ikey" within the table.
-        Table* tableptr;
-        Iterator* iter = table_cache_->NewIterator(
-            ReadOptions(), files[i]->number, files[i]->file_size, &tableptr);
+        Table *tableptr;
+        Iterator *iter = table_cache_->NewIterator(
+          ReadOptions(), files[i]->number, files[i]->file_size, &tableptr);
         if (tableptr != NULL) {
           result += tableptr->ApproximateOffsetOf(ikey.Encode());
         }
@@ -5031,12 +5052,12 @@ uint64_t VersionSet::ApproximateOffsetOf(Version* v, const InternalKey& ikey) {
   return result;
 }
 
-void VersionSet::AddLiveFiles(std::set<uint64_t>* live) {
-  for (Version* v = dummy_versions_.next_;
-       v != &dummy_versions_;
-       v = v->next_) {
+void VersionSet::AddLiveFiles(std::set<uint64_t> *live) {
+  for (Version *v = dummy_versions_.next_;
+    v != &dummy_versions_;
+    v = v->next_) {
     for (int level = 0; level < config::kNumLevels; level++) {
-      const std::vector<FileMetaData*>& files = v->files_[level];
+      const std::vector<FileMetaData *> &files = v->files_[level];
       for (size_t i = 0; i < files.size(); i++) {
         live->insert(files[i]->number);
       }
@@ -5052,12 +5073,12 @@ int64_t VersionSet::NumLevelBytes(int level) const {
 
 int64_t VersionSet::MaxNextLevelOverlappingBytes() {
   int64_t result = 0;
-  std::vector<FileMetaData*> overlaps;
+  std::vector<FileMetaData *> overlaps;
   for (int level = 1; level < config::kNumLevels - 1; level++) {
     for (size_t i = 0; i < current_->files_[level].size(); i++) {
-      const FileMetaData* f = current_->files_[level][i];
-      current_->GetOverlappingInputs(level+1, &f->smallest, &f->largest,
-                                     &overlaps);
+      const FileMetaData *f = current_->files_[level][i];
+      current_->GetOverlappingInputs(level + 1, &f->smallest, &f->largest,
+        &overlaps);
       const int64_t sum = TotalFileSize(overlaps);
       if (sum > result) {
         result = sum;
@@ -5070,14 +5091,14 @@ int64_t VersionSet::MaxNextLevelOverlappingBytes() {
 // Stores the minimal range that covers all entries in inputs in
 // *smallest, *largest.
 // REQUIRES: inputs is not empty
-void VersionSet::GetRange(const std::vector<FileMetaData*>& inputs,
-                          InternalKey* smallest,
-                          InternalKey* largest) {
+void VersionSet::GetRange(const std::vector<FileMetaData *> &inputs,
+  InternalKey *smallest,
+  InternalKey *largest) {
   assert(!inputs.empty());
   smallest->Clear();
   largest->Clear();
   for (size_t i = 0; i < inputs.size(); i++) {
-    FileMetaData* f = inputs[i];
+    FileMetaData *f = inputs[i];
     if (i == 0) {
       *smallest = f->smallest;
       *largest = f->largest;
@@ -5095,16 +5116,16 @@ void VersionSet::GetRange(const std::vector<FileMetaData*>& inputs,
 // Stores the minimal range that covers all entries in inputs1 and inputs2
 // in *smallest, *largest.
 // REQUIRES: inputs is not empty
-void VersionSet::GetRange2(const std::vector<FileMetaData*>& inputs1,
-                           const std::vector<FileMetaData*>& inputs2,
-                           InternalKey* smallest,
-                           InternalKey* largest) {
-  std::vector<FileMetaData*> all = inputs1;
+void VersionSet::GetRange2(const std::vector<FileMetaData *> &inputs1,
+  const std::vector<FileMetaData *> &inputs2,
+  InternalKey *smallest,
+  InternalKey *largest) {
+  std::vector<FileMetaData *> all = inputs1;
   all.insert(all.end(), inputs2.begin(), inputs2.end());
   GetRange(all, smallest, largest);
 }
 
-Iterator* VersionSet::MakeInputIterator(Compaction* c) {
+Iterator *VersionSet::MakeInputIterator(Compaction *c) {
   ReadOptions options;
   options.verify_checksums = options_->paranoid_checks;
   options.fill_cache = false;
@@ -5113,32 +5134,32 @@ Iterator* VersionSet::MakeInputIterator(Compaction* c) {
   // we will make a concatenating iterator per level.
   // TODO(opt): use concatenating iterator for level-0 if there is no overlap
   const int space = (c->level() == 0 ? (uint32_t)c->inputs_[0].size() + 1 : 2);
-  Iterator** list = new Iterator*[space];
+  Iterator **list = new Iterator * [space];
   int num = 0;
   for (int which = 0; which < 2; which++) {
     if (!c->inputs_[which].empty()) {
       if (c->level() + which == 0) {
-        const std::vector<FileMetaData*>& files = c->inputs_[which];
+        const std::vector<FileMetaData *> &files = c->inputs_[which];
         for (size_t i = 0; i < files.size(); i++) {
           list[num++] = table_cache_->NewIterator(
-              options, files[i]->number, files[i]->file_size);
+            options, files[i]->number, files[i]->file_size);
         }
       } else {
         // Create concatenating iterator for the files from this level
         list[num++] = NewTwoLevelIterator(
-            new Version::LevelFileNumIterator(icmp_, &c->inputs_[which]),
-            &GetFileIterator, table_cache_, options);
+          new Version::LevelFileNumIterator(icmp_, &c->inputs_[which]),
+          &GetFileIterator, table_cache_, options);
       }
     }
   }
   assert(num <= space);
-  Iterator* result = NewMergingIterator(&icmp_, list, num);
+  Iterator *result = NewMergingIterator(&icmp_, list, num);
   delete[] list;
   return result;
 }
 
-Compaction* VersionSet::PickCompaction() {
-  Compaction* c;
+Compaction *VersionSet::PickCompaction() {
+  Compaction *c;
   int level;
 
   // We prefer compactions triggered by too much data in a level over
@@ -5148,14 +5169,14 @@ Compaction* VersionSet::PickCompaction() {
   if (size_compaction) {
     level = current_->compaction_level_;
     assert(level >= 0);
-    assert(level+1 < config::kNumLevels);
+    assert(level + 1 < config::kNumLevels);
     c = new Compaction(options_, level);
 
     // Pick the first file that comes after compact_pointer_[level]
     for (size_t i = 0; i < current_->files_[level].size(); i++) {
-      FileMetaData* f = current_->files_[level][i];
+      FileMetaData *f = current_->files_[level][i];
       if (compact_pointer_[level].empty() ||
-          icmp_.Compare(f->largest.Encode(), compact_pointer_[level]) > 0) {
+        icmp_.Compare(f->largest.Encode(), compact_pointer_[level]) > 0) {
         c->inputs_[0].push_back(f);
         break;
       }
@@ -5191,12 +5212,12 @@ Compaction* VersionSet::PickCompaction() {
   return c;
 }
 
-void VersionSet::SetupOtherInputs(Compaction* c) {
+void VersionSet::SetupOtherInputs(Compaction *c) {
   const int level = c->level();
   InternalKey smallest, largest;
   GetRange(c->inputs_[0], &smallest, &largest);
 
-  current_->GetOverlappingInputs(level+1, &smallest, &largest, &c->inputs_[1]);
+  current_->GetOverlappingInputs(level + 1, &smallest, &largest, &c->inputs_[1]);
 
   // Get entire range covered by compaction
   InternalKey all_start, all_limit;
@@ -5205,29 +5226,29 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
   // See if we can grow the number of inputs in "level" without
   // changing the number of "level+1" files we pick up.
   if (!c->inputs_[1].empty()) {
-    std::vector<FileMetaData*> expanded0;
+    std::vector<FileMetaData *> expanded0;
     current_->GetOverlappingInputs(level, &all_start, &all_limit, &expanded0);
     const int64_t inputs0_size = TotalFileSize(c->inputs_[0]);
     const int64_t inputs1_size = TotalFileSize(c->inputs_[1]);
     const int64_t expanded0_size = TotalFileSize(expanded0);
     if (expanded0.size() > c->inputs_[0].size() &&
-        inputs1_size + expanded0_size <
-            ExpandedCompactionByteSizeLimit(options_)) {
+      inputs1_size + expanded0_size <
+      ExpandedCompactionByteSizeLimit(options_)) {
       InternalKey new_start, new_limit;
       GetRange(expanded0, &new_start, &new_limit);
-      std::vector<FileMetaData*> expanded1;
-      current_->GetOverlappingInputs(level+1, &new_start, &new_limit,
-                                     &expanded1);
+      std::vector<FileMetaData *> expanded1;
+      current_->GetOverlappingInputs(level + 1, &new_start, &new_limit,
+        &expanded1);
       if (expanded1.size() == c->inputs_[1].size()) {
         Log(options_->info_log,
-            "Expanding@%d %d+%d (%ld+%ld bytes) to %d+%d (%ld+%ld bytes)\n",
-            level,
-            int(c->inputs_[0].size()),
-            int(c->inputs_[1].size()),
-            long(inputs0_size), long(inputs1_size),
-            int(expanded0.size()),
-            int(expanded1.size()),
-            long(expanded0_size), long(inputs1_size));
+          "Expanding@%d %d+%d (%ld+%ld bytes) to %d+%d (%ld+%ld bytes)\n",
+          level,
+          int(c->inputs_[0].size()),
+          int(c->inputs_[1].size()),
+          long(inputs0_size), long(inputs1_size),
+          int(expanded0.size()),
+          int(expanded1.size()),
+          long(expanded0_size), long(inputs1_size));
         smallest = new_start;
         largest = new_limit;
         c->inputs_[0] = expanded0;
@@ -5241,14 +5262,14 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
   // (parent == level+1; grandparent == level+2)
   if (level + 2 < config::kNumLevels) {
     current_->GetOverlappingInputs(level + 2, &all_start, &all_limit,
-                                   &c->grandparents_);
+      &c->grandparents_);
   }
 
   if (false) {
     Log(options_->info_log, "Compacting %d '%s' .. '%s'",
-        level,
-        smallest.DebugString().c_str(),
-        largest.DebugString().c_str());
+      level,
+      smallest.DebugString().c_str(),
+      largest.DebugString().c_str());
   }
 
   // Update the place where we will do the next compaction for this level.
@@ -5259,11 +5280,11 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
   c->edit_.SetCompactPointer(level, largest);
 }
 
-Compaction* VersionSet::CompactRange(
-    int level,
-    const InternalKey* begin,
-    const InternalKey* end) {
-  std::vector<FileMetaData*> inputs;
+Compaction *VersionSet::CompactRange(
+  int level,
+  const InternalKey *begin,
+  const InternalKey *end) {
+  std::vector<FileMetaData *> inputs;
   current_->GetOverlappingInputs(level, begin, end, &inputs);
   if (inputs.empty()) {
     return NULL;
@@ -5286,7 +5307,7 @@ Compaction* VersionSet::CompactRange(
     }
   }
 
-  Compaction* c = new Compaction(options_, level);
+  Compaction *c = new Compaction(options_, level);
   c->input_version_ = current_;
   c->input_version_->Ref();
   c->inputs_[0] = inputs;
@@ -5294,13 +5315,13 @@ Compaction* VersionSet::CompactRange(
   return c;
 }
 
-Compaction::Compaction(const Options* options, int level)
-    : level_(level),
-      max_output_file_size_(MaxFileSizeForLevel(options, level)),
-      input_version_(NULL),
-      grandparent_index_(0),
-      seen_key_(false),
-      overlapped_bytes_(0) {
+Compaction::Compaction(const Options *options, int level)
+  : level_(level),
+  max_output_file_size_(MaxFileSizeForLevel(options, level)),
+  input_version_(NULL),
+  grandparent_index_(0),
+  seen_key_(false),
+  overlapped_bytes_(0) {
   for (int i = 0; i < config::kNumLevels; i++) {
     level_ptrs_[i] = 0;
   }
@@ -5313,16 +5334,16 @@ Compaction::~Compaction() {
 }
 
 bool Compaction::IsTrivialMove() const {
-  const VersionSet* vset = input_version_->vset_;
+  const VersionSet *vset = input_version_->vset_;
   // Avoid a move if there is lots of overlapping grandparent data.
   // Otherwise, the move could create a parent file that will require
   // a very expensive merge later on.
   return (num_input_files(0) == 1 && num_input_files(1) == 0 &&
-          TotalFileSize(grandparents_) <=
-              MaxGrandParentOverlapBytes(vset->options_));
+    TotalFileSize(grandparents_) <=
+    MaxGrandParentOverlapBytes(vset->options_));
 }
 
-void Compaction::AddInputDeletions(VersionEdit* edit) {
+void Compaction::AddInputDeletions(VersionEdit *edit) {
   for (int which = 0; which < 2; which++) {
     for (size_t i = 0; i < inputs_[which].size(); i++) {
       edit->DeleteFile(level_ + which, inputs_[which][i]->number);
@@ -5330,13 +5351,13 @@ void Compaction::AddInputDeletions(VersionEdit* edit) {
   }
 }
 
-bool Compaction::IsBaseLevelForKey(const Slice& user_key) {
+bool Compaction::IsBaseLevelForKey(const Slice &user_key) {
   // Maybe use binary search to find right entry instead of linear search?
-  const Comparator* user_cmp = input_version_->vset_->icmp_.user_comparator();
+  const Comparator *user_cmp = input_version_->vset_->icmp_.user_comparator();
   for (int lvl = level_ + 2; lvl < config::kNumLevels; lvl++) {
-    const std::vector<FileMetaData*>& files = input_version_->files_[lvl];
+    const std::vector<FileMetaData *> &files = input_version_->files_[lvl];
     for (; level_ptrs_[lvl] < files.size(); ) {
-      FileMetaData* f = files[level_ptrs_[lvl]];
+      FileMetaData *f = files[level_ptrs_[lvl]];
       if (user_cmp->Compare(user_key, f->largest.user_key()) <= 0) {
         // We've advanced far enough
         if (user_cmp->Compare(user_key, f->smallest.user_key()) >= 0) {
@@ -5351,13 +5372,13 @@ bool Compaction::IsBaseLevelForKey(const Slice& user_key) {
   return true;
 }
 
-bool Compaction::ShouldStopBefore(const Slice& internal_key) {
-  const VersionSet* vset = input_version_->vset_;
+bool Compaction::ShouldStopBefore(const Slice &internal_key) {
+  const VersionSet *vset = input_version_->vset_;
   // Scan to find earliest grandparent file that contains key.
-  const InternalKeyComparator* icmp = &vset->icmp_;
+  const InternalKeyComparator *icmp = &vset->icmp_;
   while (grandparent_index_ < grandparents_.size() &&
-      icmp->Compare(internal_key,
-                    grandparents_[grandparent_index_]->largest.Encode()) > 0) {
+    icmp->Compare(internal_key,
+      grandparents_[grandparent_index_]->largest.Encode()) > 0) {
     if (seen_key_) {
       overlapped_bytes_ += grandparents_[grandparent_index_]->file_size;
     }
@@ -5403,12 +5424,11 @@ WriteBatch::WriteBatch() {
   Clear();
 }
 
-WriteBatch::~WriteBatch() 
-{
+WriteBatch::~WriteBatch() {
 
 }
 
-WriteBatch::Handler::~Handler() { }
+WriteBatch::Handler::~Handler() {}
 
 void WriteBatch::Clear() {
   rep_.clear();
@@ -5419,7 +5439,7 @@ size_t WriteBatch::ApproximateSize() {
   return rep_.size();
 }
 
-Status WriteBatch::Iterate(Handler* handler) const {
+Status WriteBatch::Iterate(Handler *handler) const {
   Slice input(rep_);
   if (input.size() < kHeader) {
     return Status::Corruption("malformed WriteBatch (too small)");
@@ -5435,7 +5455,7 @@ Status WriteBatch::Iterate(Handler* handler) const {
     switch (tag) {
       case kTypeValue:
         if (GetLengthPrefixedSlice(&input, &key) &&
-            GetLengthPrefixedSlice(&input, &value)) {
+          GetLengthPrefixedSlice(&input, &value)) {
           handler->Put(key, value);
         } else {
           return Status::Corruption("bad WriteBatch Put");
@@ -5459,66 +5479,66 @@ Status WriteBatch::Iterate(Handler* handler) const {
   }
 }
 
-int WriteBatchInternal::Count(const WriteBatch* b) {
+int WriteBatchInternal::Count(const WriteBatch *b) {
   return DecodeFixed32(b->rep_.data() + 8);
 }
 
-void WriteBatchInternal::SetCount(WriteBatch* b, int n) {
+void WriteBatchInternal::SetCount(WriteBatch *b, int n) {
   EncodeFixed32(&(b->rep_)[8], n);
 }
 
-SequenceNumber WriteBatchInternal::Sequence(const WriteBatch* b) {
+SequenceNumber WriteBatchInternal::Sequence(const WriteBatch *b) {
   return SequenceNumber(DecodeFixed64(b->rep_.data()));
 }
 
-void WriteBatchInternal::SetSequence(WriteBatch* b, SequenceNumber seq) {
+void WriteBatchInternal::SetSequence(WriteBatch *b, SequenceNumber seq) {
   EncodeFixed64(&b->rep_[0], seq);
 }
 
-void WriteBatch::Put(const Slice& key, const Slice& value) {
+void WriteBatch::Put(const Slice &key, const Slice &value) {
   WriteBatchInternal::SetCount(this, WriteBatchInternal::Count(this) + 1);
   rep_.push_back(static_cast<char>(kTypeValue));
   PutLengthPrefixedSlice(&rep_, key);
   PutLengthPrefixedSlice(&rep_, value);
 }
 
-void WriteBatch::Delete(const Slice& key) {
+void WriteBatch::Delete(const Slice &key) {
   WriteBatchInternal::SetCount(this, WriteBatchInternal::Count(this) + 1);
   rep_.push_back(static_cast<char>(kTypeDeletion));
   PutLengthPrefixedSlice(&rep_, key);
 }
 
 namespace {
-class MemTableInserter : public WriteBatch::Handler {
- public:
+class MemTableInserter: public WriteBatch::Handler {
+public:
   SequenceNumber sequence_;
-  MemTable* mem_;
+  MemTable *mem_;
 
-  virtual void Put(const Slice& key, const Slice& value) {
+  virtual void Put(const Slice &key, const Slice &value) {
     mem_->Add(sequence_, kTypeValue, key, value);
     sequence_++;
   }
-  virtual void Delete(const Slice& key) {
+  virtual void Delete(const Slice &key) {
     mem_->Add(sequence_, kTypeDeletion, key, Slice());
     sequence_++;
   }
 };
 }  // namespace
 
-Status WriteBatchInternal::InsertInto(const WriteBatch* b,
-                                      MemTable* memtable) {
+Status WriteBatchInternal::InsertInto(const WriteBatch *b,
+  MemTable *memtable) {
   MemTableInserter inserter;
   inserter.sequence_ = WriteBatchInternal::Sequence(b);
   inserter.mem_ = memtable;
   return b->Iterate(&inserter);
 }
 
-void WriteBatchInternal::SetContents(WriteBatch* b, const Slice& contents) {
+void WriteBatchInternal::SetContents(WriteBatch *b, const Slice &contents) {
   assert(contents.size() >= kHeader);
   b->rep_.assign(contents.data(), contents.size());
 }
 
-void WriteBatchInternal::Append(WriteBatch* dst, const WriteBatch* src) {
+void WriteBatchInternal::Append(WriteBatch *dst, const WriteBatch *src) {
   SetCount(dst, Count(dst) + Count(src));
   assert(src->rep_.size() >= kHeader);
   dst->rep_.append(src->rep_.data() + kHeader, src->rep_.size() - kHeader);

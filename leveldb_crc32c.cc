@@ -280,7 +280,7 @@ static const uint32_t table3_[256] = {
 
 // Used to fetch a naturally-aligned 32-bit word in little endian byte-order
 static inline uint32_t LE_LOAD32(const uint8_t *p) {
-  return DecodeFixed32(reinterpret_cast<const char*>(p));
+  return DecodeFixed32(reinterpret_cast<const char *>(p));
 }
 
 // Determine if the CPU running this program can accelerate the CRC32C
@@ -294,7 +294,7 @@ static bool CanAccelerateCRC32C() {
   return port::AcceleratedCRC32C(0, kTestCRCBuffer, kBufSize) == kTestCRCValue;
 }
 
-uint32_t Extend(uint32_t crc, const char* buf, size_t size) {
+uint32_t Extend(uint32_t crc, const char *buf, size_t size) {
   static bool accelerate = CanAccelerateCRC32C();
   if (accelerate) {
     return port::AcceleratedCRC32C(crc, buf, size);
@@ -320,7 +320,7 @@ uint32_t Extend(uint32_t crc, const char* buf, size_t size) {
   // Point x at first 4-byte aligned byte in string.  This might be
   // just past the end of the string.
   const uintptr_t pval = reinterpret_cast<uintptr_t>(p);
-  const uint8_t* x = reinterpret_cast<const uint8_t*>(((pval + 3) >> 2) << 2);
+  const uint8_t *x = reinterpret_cast<const uint8_t *>(((pval + 3) >> 2) << 2);
   if (x <= e) {
     // Process bytes until finished or p is 4-byte aligned
     while (p != x) {
@@ -328,11 +328,11 @@ uint32_t Extend(uint32_t crc, const char* buf, size_t size) {
     }
   }
   // Process bytes 16 at a time
-  while ((e-p) >= 16) {
+  while ((e - p) >= 16) {
     STEP4; STEP4; STEP4; STEP4;
   }
   // Process bytes 4 at a time
-  while ((e-p) >= 4) {
+  while ((e - p) >= 4) {
     STEP4;
   }
   // Process the last few bytes

@@ -42,7 +42,7 @@ public:
 
   // Create a slice that refers to d[0,n-1].
   Slice(
-    const char* d,
+    const char *d,
     size_t n
   )
     : data_(d)
@@ -57,31 +57,39 @@ public:
 
   // Create a slice that refers to s[0,strlen(s)-1]
   Slice(
-    const char* s
+    const char *s
   )
     : data_(s)
     , size_(strlen(s)) { }
 
   // Return a pointer to the beginning of the referenced data
-  const char *data() const { return data_; }
+  const char *data() const {
+    return data_;
+  }
 
   // Return the length (in bytes) of the referenced data
-  size_t size() const { return size_; }
+  size_t size() const {
+    return size_;
+  }
 
   // Return true iff the length of the referenced data is zero
-  bool empty() const { return size_ == 0; }
+  bool empty() const {
+    return size_ == 0;
+  }
 
   // Return the ith byte in the referenced data.
   // REQUIRES: n < size()
   char operator[](
     size_t n
-  ) const {
+    ) const {
     assert(n < size());
     return data_[n];
   }
 
   // Change this slice to refer to an empty array
-  void clear() { data_ = ""; size_ = 0; }
+  void clear() {
+    data_ = ""; size_ = 0;
+  }
 
   // Drop the first "n" bytes from this slice.
   void remove_prefix(
@@ -93,7 +101,9 @@ public:
   }
 
   // Return a string that contains the copy of the referenced data.
-  std::string ToString() const { return std::string(data_, size_); }
+  std::string ToString() const {
+    return std::string(data_, size_);
+  }
 
   // Three-way comparison.  Returns value:
   //   <  0 iff "*this" <  "b",
@@ -110,12 +120,12 @@ public:
     return (
       (size_ >= x.size_)
       && (memcmp(data_, x.data_, x.size_) == 0)
-    );
+      );
   }
 
 private:
 
-  const char* data_;
+  const char *data_;
   size_t size_;
 
   // Intentionally copyable
@@ -124,22 +134,22 @@ private:
 inline bool operator==(
   const Slice &x,
   const Slice &y
-) {
+  ) {
   return (
     (x.size() == y.size())
     && (memcmp(x.data(), y.data(), x.size()) == 0)
-  );
+    );
 }
 
 inline bool operator!=(
   const Slice &x,
   const Slice &y
-) {
+  ) {
   return !(x == y);
 }
 
 inline int Slice::compare(
-  const Slice& b
+  const Slice &b
 ) const {
   const size_t min_len = (size_ < b.size_) ? size_ : b.size_;
   int r = memcmp(data_, b.data_, min_len);
@@ -165,30 +175,34 @@ public:
   };
 
   // Create a success status.
-  Status() : state_(NULL) { }
-  ~Status() { delete[] state_; }
+  Status(): state_(NULL) { }
+  ~Status() {
+    delete[] state_;
+  }
 
   // Copy the specified status.
-  Status(const Status& s);
-  void operator=(const Status& s);
+  Status(const Status &s);
+  void operator=(const Status &s);
 
   // Return a success status.
-  static Status OK() { return Status(); }
+  static Status OK() {
+    return Status();
+  }
 
   // Return error status of an appropriate type.
-  static Status NotFound(const Slice& msg, const Slice& msg2 = Slice()) {
+  static Status NotFound(const Slice &msg, const Slice &msg2 = Slice()) {
     return Status(kNotFound, msg, msg2);
   }
-  static Status Corruption(const Slice& msg, const Slice& msg2 = Slice()) {
+  static Status Corruption(const Slice &msg, const Slice &msg2 = Slice()) {
     return Status(kCorruption, msg, msg2);
   }
-  static Status NotSupported(const Slice& msg, const Slice& msg2 = Slice()) {
+  static Status NotSupported(const Slice &msg, const Slice &msg2 = Slice()) {
     return Status(kNotSupported, msg, msg2);
   }
-  static Status InvalidArgument(const Slice& msg, const Slice& msg2 = Slice()) {
+  static Status InvalidArgument(const Slice &msg, const Slice &msg2 = Slice()) {
     return Status(kInvalidArgument, msg, msg2);
   }
-  static Status IOError(const Slice& msg, const Slice& msg2 = Slice()) {
+  static Status IOError(const Slice &msg, const Slice &msg2 = Slice()) {
     return Status(kIOError, msg, msg2);
   }
 
@@ -197,22 +211,34 @@ public:
   }
 
   // Returns true iff the status indicates success.
-  bool ok() const { return (state_ == NULL); }
+  bool ok() const {
+    return (state_ == NULL);
+  }
 
   // Returns true iff the status indicates a NotFound error.
-  bool IsNotFound() const { return code() == kNotFound; }
+  bool IsNotFound() const {
+    return code() == kNotFound;
+  }
 
   // Returns true iff the status indicates a Corruption error.
-  bool IsCorruption() const { return code() == kCorruption; }
+  bool IsCorruption() const {
+    return code() == kCorruption;
+  }
 
   // Returns true iff the status indicates an IOError.
-  bool IsIOError() const { return code() == kIOError; }
+  bool IsIOError() const {
+    return code() == kIOError;
+  }
 
   // Returns true iff the status indicates a NotSupportedError.
-  bool IsNotSupportedError() const { return code() == kNotSupported; }
+  bool IsNotSupportedError() const {
+    return code() == kNotSupported;
+  }
 
   // Returns true iff the status indicates an InvalidArgument.
-  bool IsInvalidArgument() const { return code() == kInvalidArgument; }
+  bool IsInvalidArgument() const {
+    return code() == kInvalidArgument;
+  }
 
   // Return a string representation of this status suitable for printing.
   // Returns the string "OK" for success.
@@ -224,16 +250,16 @@ private:
   //    state_[0..3] == length of message
   //    state_[4]    == code
   //    state_[5..]  == message
-  const char* state_;
+  const char *state_;
 
-  Status(Code code, const Slice& msg, const Slice& msg2);
-  static const char* CopyState(const char* s);
+  Status(Code code, const Slice &msg, const Slice &msg2);
+  static const char *CopyState(const char *s);
 };
 
-inline Status::Status(const Status& s) {
+inline Status::Status(const Status &s) {
   state_ = (s.state_ == NULL) ? NULL : CopyState(s.state_);
 }
-inline void Status::operator=(const Status& s) {
+inline void Status::operator=(const Status &s) {
   // The following condition catches both aliasing (when this == &s),
   // and the common case where both s and *this are ok.
   if (state_ != s.state_) {
@@ -444,7 +470,7 @@ struct DLLX Range {
   Slice limit;          // Not included in the range
 
   Range() { }
-  Range(const Slice& s, const Slice& l) : start(s), limit(l) { }
+  Range(const Slice &s, const Slice &l): start(s), limit(l) { }
 };
 
 // A DB is a persistent ordered map from keys to values.
@@ -479,12 +505,12 @@ public:
   // success, and a non-OK status on error.  It is not an error if "key"
   // did not exist in the database.
   // Note: consider setting options.sync = true.
-  virtual Status Delete(const WriteOptions& options, const Slice& key) = 0;
+  virtual Status Delete(const WriteOptions &options, const Slice &key) = 0;
 
   // Apply the specified updates to the database.
   // Returns OK on success, non-OK on failure.
   // Note: consider setting options.sync = true.
-  virtual Status Write(const WriteOptions& options, WriteBatch* updates) = 0;
+  virtual Status Write(const WriteOptions &options, WriteBatch *updates) = 0;
 
   // If the database contains an entry for "key" store the
   // corresponding value in *value and return OK.
@@ -493,8 +519,8 @@ public:
   // a status for which Status::IsNotFound() returns true.
   //
   // May return some other Status on an error.
-  virtual Status Get(const ReadOptions& options,
-                     const Slice& key, std::string* value) = 0;
+  virtual Status Get(const ReadOptions &options,
+    const Slice &key, std::string *value) = 0;
 
   // Return a heap-allocated iterator over the contents of the database.
   // The result of NewIterator() is initially invalid (caller must
@@ -502,17 +528,17 @@ public:
   //
   // Caller should delete the iterator when it is no longer needed.
   // The returned iterator should be deleted before this db is deleted.
-  virtual Iterator* NewIterator(const ReadOptions& options) = 0;
+  virtual Iterator *NewIterator(const ReadOptions &options) = 0;
 
   // Return a handle to the current DB state.  Iterators created with
   // this handle will all observe a stable snapshot of the current DB
   // state.  The caller must call ReleaseSnapshot(result) when the
   // snapshot is no longer needed.
-  virtual const Snapshot* GetSnapshot() = 0;
+  virtual const Snapshot *GetSnapshot() = 0;
 
   // Release a previously acquired snapshot.  The caller must not
   // use "snapshot" after this call.
-  virtual void ReleaseSnapshot(const Snapshot* snapshot) = 0;
+  virtual void ReleaseSnapshot(const Snapshot *snapshot) = 0;
 
   // DB implementations can export properties about their state
   // via this method.  If "property" is a valid property understood by this
@@ -530,7 +556,7 @@ public:
   //     of the sstables that make up the db contents.
   //  "leveldb.approximate-memory-usage" - returns the approximate number of
   //     bytes of memory in use by the DB.
-  virtual bool GetProperty(const Slice& property, std::string* value) = 0;
+  virtual bool GetProperty(const Slice &property, std::string *value) = 0;
 
   // For each i in [0,n-1], store in "sizes[i]", the approximate
   // file system space used by keys in "[range[i].start .. range[i].limit)".
@@ -541,9 +567,9 @@ public:
   //
   // The results may not include the sizes of recently written data.
   virtual void GetApproximateSizes(
-    const Range* range,
+    const Range *range,
     int n,
-    uint64_t* sizes
+    uint64_t *sizes
   ) = 0;
 
   // Compact the underlying storage for the key range [*begin,*end].
@@ -556,7 +582,7 @@ public:
   // end==NULL is treated as a key after all keys in the database.
   // Therefore the following call will compact the entire database:
   //    db->CompactRange(NULL, NULL);
-  virtual void CompactRange(const Slice* begin, const Slice* end) = 0;
+  virtual void CompactRange(const Slice *begin, const Slice *end) = 0;
 
   // Allows the underlying storage to prepare for an application suspend event
   virtual void SuspendCompaction() = 0;
@@ -567,23 +593,23 @@ public:
 private:
   // No copying allowed
   DB(const DB &);
-  void operator=(const DB&);
+  void operator=(const DB &);
 };
 
 // Destroy the contents of the specified database.
 // Be very careful using this method.
-extern DLLX Status DestroyDB(const std::string& name, const Options& options);
+extern DLLX Status DestroyDB(const std::string &name, const Options &options);
 
 // If a DB cannot be opened, you may attempt to call this method to
 // resurrect as much of the contents of the database as possible.
 // Some data may be lost, so be careful when calling this function
 // on a database that contains important information.
-extern DLLX Status RepairDB(const std::string& dbname, const Options& options);
+extern DLLX Status RepairDB(const std::string &dbname, const Options &options);
 
 /* iterator.h */
 
 class DLLX Iterator {
- public:
+public:
   Iterator();
   virtual ~Iterator();
 
@@ -602,7 +628,7 @@ class DLLX Iterator {
   // Position at the first key in the source that is at or past target.
   // The iterator is Valid() after this call iff the source contains
   // an entry that comes at or past target.
-  virtual void Seek(const Slice& target) = 0;
+  virtual void Seek(const Slice &target) = 0;
 
   // Moves to the next entry in the source.  After this call, Valid() is
   // true iff the iterator was not positioned at the last entry in the source.
@@ -634,28 +660,28 @@ class DLLX Iterator {
   //
   // Note that unlike all of the preceding methods, this method is
   // not abstract and therefore clients should not override it.
-  typedef void (*CleanupFunction)(void* arg1, void* arg2);
-  void RegisterCleanup(CleanupFunction function, void* arg1, void* arg2);
+  typedef void (*CleanupFunction)(void *arg1, void *arg2);
+  void RegisterCleanup(CleanupFunction function, void *arg1, void *arg2);
 
- private:
+private:
   struct DLLX Cleanup {
     CleanupFunction function;
-    void* arg1;
-    void* arg2;
-    Cleanup* next;
+    void *arg1;
+    void *arg2;
+    Cleanup *next;
   };
   Cleanup cleanup_;
 
   // No copying allowed
-  Iterator(const Iterator&);
-  void operator=(const Iterator&);
+  Iterator(const Iterator &);
+  void operator=(const Iterator &);
 };
 
 // Return an empty iterator (yields nothing).
-extern Iterator* NewEmptyIterator();
+extern Iterator *NewEmptyIterator();
 
 // Return an empty iterator with the specified status.
-extern Iterator* NewErrorIterator(const Status& status);
+extern Iterator *NewErrorIterator(const Status &status);
 
 }; // namespace leveldb
 

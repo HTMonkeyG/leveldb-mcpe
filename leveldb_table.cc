@@ -42,11 +42,11 @@ namespace leveldb {
 // restarts[i] contains the offset within the block of the ith restart point.
 // ----------------------------------------------------------------------------
 
-BlockBuilder::BlockBuilder(const Options* options)
-    : options_(options),
-      restarts_(),
-      counter_(0),
-      finished_(false) {
+BlockBuilder::BlockBuilder(const Options *options)
+  : options_(options),
+  restarts_(),
+  counter_(0),
+  finished_(false) {
   assert(options->block_restart_interval >= 1);
   restarts_.push_back(0);       // First restart point is at offset 0
 }
@@ -62,8 +62,8 @@ void BlockBuilder::Reset() {
 
 size_t BlockBuilder::CurrentSizeEstimate() const {
   return (buffer_.size() +                        // Raw data buffer
-          restarts_.size() * sizeof(uint32_t) +   // Restart array
-          sizeof(uint32_t));                      // Restart array length
+    restarts_.size() * sizeof(uint32_t) +   // Restart array
+    sizeof(uint32_t));                      // Restart array length
 }
 
 Slice BlockBuilder::Finish() {
@@ -76,12 +76,12 @@ Slice BlockBuilder::Finish() {
   return Slice(buffer_);
 }
 
-void BlockBuilder::Add(const Slice& key, const Slice& value) {
+void BlockBuilder::Add(const Slice &key, const Slice &value) {
   Slice last_key_piece(last_key_);
   assert(!finished_);
   assert(counter_ <= options_->block_restart_interval);
   assert(buffer_.empty() // No values yet?
-         || options_->comparator->Compare(key, last_key_piece) > 0);
+    || options_->comparator->Compare(key, last_key_piece) > 0);
   size_t shared = 0;
   if (counter_ < options_->block_restart_interval) {
     // See how much sharing to do with previous string
@@ -123,14 +123,14 @@ inline uint32_t Block::NumRestarts() const {
   return DecodeFixed32(data_ + size_ - sizeof(uint32_t));
 }
 
-Block::Block(const BlockContents& contents)
-    : data_(contents.data.data()),
-      size_(contents.data.size()),
-      owned_(contents.heap_allocated) {
+Block::Block(const BlockContents &contents)
+  : data_(contents.data.data()),
+  size_(contents.data.size()),
+  owned_(contents.heap_allocated) {
   if (size_ < sizeof(uint32_t)) {
     size_ = 0;  // Error marker
   } else {
-    size_t max_restarts_allowed = (size_-sizeof(uint32_t)) / sizeof(uint32_t);
+    size_t max_restarts_allowed = (size_ - sizeof(uint32_t)) / sizeof(uint32_t);
     if (NumRestarts() > max_restarts_allowed) {
       // The size is too small for NumRestarts()
       size_ = 0;
@@ -153,14 +153,14 @@ Block::~Block() {
 //
 // If any errors are detected, returns NULL.  Otherwise, returns a
 // pointer to the key delta (just past the three decoded values).
-static inline const char* DecodeEntry(const char* p, const char* limit,
-                                      uint32_t* shared,
-                                      uint32_t* non_shared,
-                                      uint32_t* value_length) {
+static inline const char *DecodeEntry(const char *p, const char *limit,
+  uint32_t *shared,
+  uint32_t *non_shared,
+  uint32_t *value_length) {
   if (limit - p < 3) return NULL;
-  *shared = reinterpret_cast<const unsigned char*>(p)[0];
-  *non_shared = reinterpret_cast<const unsigned char*>(p)[1];
-  *value_length = reinterpret_cast<const unsigned char*>(p)[2];
+  *shared = reinterpret_cast<const unsigned char *>(p)[0];
+  *non_shared = reinterpret_cast<const unsigned char *>(p)[1];
+  *value_length = reinterpret_cast<const unsigned char *>(p)[2];
   if ((*shared | *non_shared | *value_length) < 128) {
     // Fast path: all three values are encoded in one byte each
     p += 3;
@@ -176,10 +176,10 @@ static inline const char* DecodeEntry(const char* p, const char* limit,
   return p;
 }
 
-class Block::Iter : public Iterator {
- private:
-  const Comparator* const comparator_;
-  const char* const data_;      // underlying block contents
+class Block::Iter: public Iterator {
+private:
+  const Comparator *const comparator_;
+  const char *const data_;      // underlying block contents
   uint32_t const restarts_;     // Offset of restart array (list of fixed32)
   uint32_t const num_restarts_; // Number of uint32_t entries in restart array
 
@@ -190,7 +190,7 @@ class Block::Iter : public Iterator {
   Slice value_;
   Status status_;
 
-  inline int Compare(const Slice& a, const Slice& b) const {
+  inline int Compare(const Slice &a, const Slice &b) const {
     return comparator_->Compare(a, b);
   }
 
@@ -214,22 +214,26 @@ class Block::Iter : public Iterator {
     value_ = Slice(data_ + offset, 0);
   }
 
- public:
-  Iter(const Comparator* comparator,
-       const char* data,
-       uint32_t restarts,
-       uint32_t num_restarts)
-      : comparator_(comparator),
-        data_(data),
-        restarts_(restarts),
-        num_restarts_(num_restarts),
-        current_(restarts_),
-        restart_index_(num_restarts_) {
+public:
+  Iter(const Comparator *comparator,
+    const char *data,
+    uint32_t restarts,
+    uint32_t num_restarts)
+    : comparator_(comparator),
+    data_(data),
+    restarts_(restarts),
+    num_restarts_(num_restarts),
+    current_(restarts_),
+    restart_index_(num_restarts_) {
     assert(num_restarts_ > 0);
   }
 
-  virtual bool Valid() const { return current_ < restarts_; }
-  virtual Status status() const { return status_; }
+  virtual bool Valid() const {
+    return current_ < restarts_;
+  }
+  virtual Status status() const {
+    return status_;
+  }
   virtual Slice key() const {
     assert(Valid());
     return key_;
@@ -265,7 +269,7 @@ class Block::Iter : public Iterator {
     } while (ParseNextKey() && NextEntryOffset() < original);
   }
 
-  virtual void Seek(const Slice& target) {
+  virtual void Seek(const Slice &target) {
     // Binary search in restart array to find the last restart point
     // with a key < target
     uint32_t left = 0;
@@ -274,9 +278,9 @@ class Block::Iter : public Iterator {
       uint32_t mid = (left + right + 1) / 2;
       uint32_t region_offset = GetRestartPoint(mid);
       uint32_t shared, non_shared, value_length;
-      const char* key_ptr = DecodeEntry(data_ + region_offset,
-                                        data_ + restarts_,
-                                        &shared, &non_shared, &value_length);
+      const char *key_ptr = DecodeEntry(data_ + region_offset,
+        data_ + restarts_,
+        &shared, &non_shared, &value_length);
       if (key_ptr == NULL || (shared != 0)) {
         CorruptionError();
         return;
@@ -317,7 +321,7 @@ class Block::Iter : public Iterator {
     }
   }
 
- private:
+private:
   void CorruptionError() {
     current_ = restarts_;
     restart_index_ = num_restarts_;
@@ -328,8 +332,8 @@ class Block::Iter : public Iterator {
 
   bool ParseNextKey() {
     current_ = (uint32_t)NextEntryOffset();
-    const char* p = data_ + current_;
-    const char* limit = data_ + restarts_;  // Restarts come right after data
+    const char *p = data_ + current_;
+    const char *limit = data_ + restarts_;  // Restarts come right after data
     if (p >= limit) {
       // No more entries to return.  Mark as invalid.
       current_ = restarts_;
@@ -348,7 +352,7 @@ class Block::Iter : public Iterator {
       key_.append(p, non_shared);
       value_ = Slice(p + non_shared, value_length);
       while (restart_index_ + 1 < num_restarts_ &&
-             GetRestartPoint(restart_index_ + 1) < current_) {
+        GetRestartPoint(restart_index_ + 1) < current_) {
         ++restart_index_;
       }
       return true;
@@ -356,7 +360,7 @@ class Block::Iter : public Iterator {
   }
 };
 
-Iterator* Block::NewIterator(const Comparator* cmp) {
+Iterator *Block::NewIterator(const Comparator *cmp) {
   if (size_ < sizeof(uint32_t)) {
     return NewErrorIterator(Status::Corruption("bad block contents"));
   }
@@ -378,9 +382,8 @@ Iterator* Block::NewIterator(const Comparator* cmp) {
 static const size_t kFilterBaseLg = 11;
 static const size_t kFilterBase = 1 << kFilterBaseLg;
 
-FilterBlockBuilder::FilterBlockBuilder(const FilterPolicy* policy)
-    : policy_(policy) {
-}
+FilterBlockBuilder::FilterBlockBuilder(const FilterPolicy *policy)
+  : policy_(policy) {}
 
 void FilterBlockBuilder::StartBlock(uint64_t block_offset) {
   uint64_t filter_index = (block_offset / kFilterBase);
@@ -390,7 +393,7 @@ void FilterBlockBuilder::StartBlock(uint64_t block_offset) {
   }
 }
 
-void FilterBlockBuilder::AddKey(const Slice& key) {
+void FilterBlockBuilder::AddKey(const Slice &key) {
   Slice k = key;
   start_.push_back(keys_.size());
   keys_.append(k.data(), k.size());
@@ -424,8 +427,8 @@ void FilterBlockBuilder::GenerateFilter() {
   start_.push_back(keys_.size());  // Simplify length computation
   tmp_keys_.resize(num_keys);
   for (size_t i = 0; i < num_keys; i++) {
-    const char* base = keys_.data() + start_[i];
-    size_t length = start_[i+1] - start_[i];
+    const char *base = keys_.data() + start_[i];
+    size_t length = start_[i + 1] - start_[i];
     tmp_keys_[i] = Slice(base, length);
   }
 
@@ -438,16 +441,16 @@ void FilterBlockBuilder::GenerateFilter() {
   start_.clear();
 }
 
-FilterBlockReader::FilterBlockReader(const FilterPolicy* policy,
-                                     const Slice& contents)
-    : policy_(policy),
-      data_(NULL),
-      offset_(NULL),
-      num_(0),
-      base_lg_(0) {
+FilterBlockReader::FilterBlockReader(const FilterPolicy *policy,
+  const Slice &contents)
+  : policy_(policy),
+  data_(NULL),
+  offset_(NULL),
+  num_(0),
+  base_lg_(0) {
   size_t n = contents.size();
   if (n < 5) return;  // 1 byte for base_lg_ and 4 for start of offset array
-  base_lg_ = contents[n-1];
+  base_lg_ = contents[n - 1];
   uint32_t last_word = DecodeFixed32(contents.data() + n - 5);
   if (last_word > n - 5) return;
   data_ = contents.data();
@@ -459,11 +462,11 @@ FilterBlockReader::FilterBlockReader(const FilterPolicy* policy,
 #pragma warning ( push )
 #pragma warning ( disable : 4018 )
 #endif
-bool FilterBlockReader::KeyMayMatch(uint64_t block_offset, const Slice& key) {
+bool FilterBlockReader::KeyMayMatch(uint64_t block_offset, const Slice &key) {
   uint64_t index = block_offset >> base_lg_;
   if (index < num_) {
-    uint32_t start = DecodeFixed32(offset_ + index*4);
-    uint32_t limit = DecodeFixed32(offset_ + index*4 + 4);
+    uint32_t start = DecodeFixed32(offset_ + index * 4);
+    uint32_t limit = DecodeFixed32(offset_ + index * 4 + 4);
     if (start <= limit && limit <= static_cast<size_t>(offset_ - data_)) {
       Slice filter = Slice(data_ + start, limit - start);
       return policy_->KeyMayMatch(key, filter);
@@ -482,7 +485,7 @@ bool FilterBlockReader::KeyMayMatch(uint64_t block_offset, const Slice& key) {
 // - table/format.cc
 // ----------------------------------------------------------------------------
 
-DecompressAllocator::~DecompressAllocator() { }
+DecompressAllocator::~DecompressAllocator() {}
 
 std::string DecompressAllocator::get() {
   std::string buffer;
@@ -496,7 +499,7 @@ std::string DecompressAllocator::get() {
   return buffer;
 }
 
-void DecompressAllocator::release(std::string&& string) {
+void DecompressAllocator::release(std::string &&string) {
   std::lock_guard<std::mutex> lock(mutex);
   stack.push_back(std::move(string));
 }
@@ -506,7 +509,7 @@ void DecompressAllocator::prune() {
   stack.clear();
 }
 
-void BlockHandle::EncodeTo(std::string* dst) const {
+void BlockHandle::EncodeTo(std::string *dst) const {
   // Sanity check that all fields have been set
   assert(offset_ != ~static_cast<uint64_t>(0));
   assert(size_ != ~static_cast<uint64_t>(0));
@@ -514,7 +517,7 @@ void BlockHandle::EncodeTo(std::string* dst) const {
   PutVarint64(dst, size_);
 }
 
-Status BlockHandle::DecodeFrom(Slice* input) {
+Status BlockHandle::DecodeFrom(Slice *input) {
   if (GetVarint64(input, &offset_) &&
     GetVarint64(input, &size_)) {
     return Status::OK();
@@ -523,7 +526,7 @@ Status BlockHandle::DecodeFrom(Slice* input) {
   }
 }
 
-void Footer::EncodeTo(std::string* dst) const {
+void Footer::EncodeTo(std::string *dst) const {
   const size_t original_size = dst->size();
   metaindex_handle_.EncodeTo(dst);
   index_handle_.EncodeTo(dst);
@@ -534,12 +537,12 @@ void Footer::EncodeTo(std::string* dst) const {
   (void)original_size;  // Disable unused variable warning.
 }
 
-Status Footer::DecodeFrom(Slice* input) {
-  const char* magic_ptr = input->data() + kEncodedLength - 8;
+Status Footer::DecodeFrom(Slice *input) {
+  const char *magic_ptr = input->data() + kEncodedLength - 8;
   const uint32_t magic_lo = DecodeFixed32(magic_ptr);
   const uint32_t magic_hi = DecodeFixed32(magic_ptr + 4);
   const uint64_t magic = ((static_cast<uint64_t>(magic_hi) << 32) |
-                          (static_cast<uint64_t>(magic_lo)));
+    (static_cast<uint64_t>(magic_lo)));
   if (magic != kTableMagicNumber) {
     return Status::Corruption("not an sstable (bad magic number)");
   }
@@ -550,17 +553,17 @@ Status Footer::DecodeFrom(Slice* input) {
   }
   if (result.ok()) {
     // We skip over any leftover data (just padding for now) in "input"
-    const char* end = magic_ptr + 8;
+    const char *end = magic_ptr + 8;
     *input = Slice(end, input->data() + input->size() - end);
   }
   return result;
 }
 
-Status ReadBlock(RandomAccessFile* file,
-  const Options& dbOptions,
-  const ReadOptions& options,
-  const BlockHandle& handle,
-  BlockContents* result) {
+Status ReadBlock(RandomAccessFile *file,
+  const Options &dbOptions,
+  const ReadOptions &options,
+  const BlockHandle &handle,
+  BlockContents *result) {
   result->data = Slice();
   result->cachable = false;
   result->heap_allocated = false;
@@ -568,7 +571,7 @@ Status ReadBlock(RandomAccessFile* file,
   // Read the block contents as well as the type/crc footer.
   // See table_builder.cc for the code that built this structure.
   size_t n = static_cast<size_t>(handle.size());
-  char* buf = new char[n + kBlockTrailerSize];
+  char *buf = new char[n + kBlockTrailerSize];
   Slice contents;
   Status s = file->Read(handle.offset(), n + kBlockTrailerSize, &contents, buf);
   if (!s.ok()) {
@@ -581,7 +584,7 @@ Status ReadBlock(RandomAccessFile* file,
   }
 
   // Check the crc of the type and the block contents
-  const char* data = contents.data();    // Pointer to where Read put the data
+  const char *data = contents.data();    // Pointer to where Read put the data
   if (options.verify_checksums) {
     const uint32_t crc = crc32c::Unmask(DecodeFixed32(data + n + 1));
     const uint32_t actual = crc32c::Value(data, n + 1);
@@ -610,8 +613,8 @@ Status ReadBlock(RandomAccessFile* file,
     }
   } else {
     //find the required compressor
-    Compressor* compressor = nullptr;
-    for (auto& c : dbOptions.compressors) {
+    Compressor *compressor = nullptr;
+    for (auto &c : dbOptions.compressors) {
       if (!c || c->uniqueCompressionID == compressionID) {
         compressor = c;
         break;
@@ -639,7 +642,7 @@ Status ReadBlock(RandomAccessFile* file,
     }
 
     delete[] buf;
-      
+
     if (options.decompress_allocator) {
       options.decompress_allocator->release(std::move(buffer));
     }
@@ -664,18 +667,18 @@ Iterator::Iterator() {
 Iterator::~Iterator() {
   if (cleanup_.function != NULL) {
     (*cleanup_.function)(cleanup_.arg1, cleanup_.arg2);
-    for (Cleanup* c = cleanup_.next; c != NULL; ) {
+    for (Cleanup *c = cleanup_.next; c != NULL; ) {
       (*c->function)(c->arg1, c->arg2);
-      Cleanup* next = c->next;
+      Cleanup *next = c->next;
       delete c;
       c = next;
     }
   }
 }
 
-void Iterator::RegisterCleanup(CleanupFunction func, void* arg1, void* arg2) {
+void Iterator::RegisterCleanup(CleanupFunction func, void *arg1, void *arg2) {
   assert(func != NULL);
-  Cleanup* c;
+  Cleanup *c;
   if (cleanup_.function == NULL) {
     c = &cleanup_;
   } else {
@@ -689,28 +692,40 @@ void Iterator::RegisterCleanup(CleanupFunction func, void* arg1, void* arg2) {
 }
 
 namespace {
-class EmptyIterator : public Iterator {
- public:
-  EmptyIterator(const Status& s) : status_(s) { }
-  virtual bool Valid() const { return false; }
-  virtual void Seek(const Slice& target) { }
-  virtual void SeekToFirst() { }
-  virtual void SeekToLast() { }
-  virtual void Next() { assert(false); }
-  virtual void Prev() { assert(false); }
-  Slice key() const { assert(false); return Slice(); }
-  Slice value() const { assert(false); return Slice(); }
-  virtual Status status() const { return status_; }
- private:
+class EmptyIterator: public Iterator {
+public:
+  EmptyIterator(const Status &s): status_(s) {}
+  virtual bool Valid() const {
+    return false;
+  }
+  virtual void Seek(const Slice &target) {}
+  virtual void SeekToFirst() {}
+  virtual void SeekToLast() {}
+  virtual void Next() {
+    assert(false);
+  }
+  virtual void Prev() {
+    assert(false);
+  }
+  Slice key() const {
+    assert(false); return Slice();
+  }
+  Slice value() const {
+    assert(false); return Slice();
+  }
+  virtual Status status() const {
+    return status_;
+  }
+private:
   Status status_;
 };
 }  // namespace
 
-Iterator* NewEmptyIterator() {
+Iterator *NewEmptyIterator() {
   return new EmptyIterator(Status::OK());
 }
 
-Iterator* NewErrorIterator(const Status& status) {
+Iterator *NewErrorIterator(const Status &status) {
   return new EmptyIterator(status);
 }
 
@@ -720,14 +735,14 @@ Iterator* NewErrorIterator(const Status& status) {
 
 namespace {
 
-class MergingIterator : public Iterator {
- public:
-  MergingIterator(const Comparator* comparator, Iterator** children, int n)
-      : comparator_(comparator),
-        children_(new IteratorWrapper[n]),
-        n_(n),
-        current_(NULL),
-        direction_(kForward) {
+class MergingIterator: public Iterator {
+public:
+  MergingIterator(const Comparator *comparator, Iterator **children, int n)
+    : comparator_(comparator),
+    children_(new IteratorWrapper[n]),
+    n_(n),
+    current_(NULL),
+    direction_(kForward) {
     for (int i = 0; i < n; i++) {
       children_[i].Set(children[i]);
     }
@@ -757,7 +772,7 @@ class MergingIterator : public Iterator {
     direction_ = kReverse;
   }
 
-  virtual void Seek(const Slice& target) {
+  virtual void Seek(const Slice &target) {
     for (int i = 0; i < n_; i++) {
       children_[i].Seek(target);
     }
@@ -775,11 +790,11 @@ class MergingIterator : public Iterator {
     // we explicitly position the non-current_ children.
     if (direction_ != kForward) {
       for (int i = 0; i < n_; i++) {
-        IteratorWrapper* child = &children_[i];
+        IteratorWrapper *child = &children_[i];
         if (child != current_) {
           child->Seek(key());
           if (child->Valid() &&
-              comparator_->Compare(key(), child->key()) == 0) {
+            comparator_->Compare(key(), child->key()) == 0) {
             child->Next();
           }
         }
@@ -801,7 +816,7 @@ class MergingIterator : public Iterator {
     // we explicitly position the non-current_ children.
     if (direction_ != kReverse) {
       for (int i = 0; i < n_; i++) {
-        IteratorWrapper* child = &children_[i];
+        IteratorWrapper *child = &children_[i];
         if (child != current_) {
           child->Seek(key());
           if (child->Valid()) {
@@ -841,17 +856,17 @@ class MergingIterator : public Iterator {
     return status;
   }
 
- private:
+private:
   void FindSmallest();
   void FindLargest();
 
   // We might want to use a heap in case there are lots of children.
   // For now we use a simple array since we expect a very small number
   // of children in leveldb.
-  const Comparator* comparator_;
-  IteratorWrapper* children_;
+  const Comparator *comparator_;
+  IteratorWrapper *children_;
   int n_;
-  IteratorWrapper* current_;
+  IteratorWrapper *current_;
 
   // Which direction is the iterator moving?
   enum Direction {
@@ -862,9 +877,9 @@ class MergingIterator : public Iterator {
 };
 
 void MergingIterator::FindSmallest() {
-  IteratorWrapper* smallest = NULL;
+  IteratorWrapper *smallest = NULL;
   for (int i = 0; i < n_; i++) {
-    IteratorWrapper* child = &children_[i];
+    IteratorWrapper *child = &children_[i];
     if (child->Valid()) {
       if (smallest == NULL) {
         smallest = child;
@@ -877,9 +892,9 @@ void MergingIterator::FindSmallest() {
 }
 
 void MergingIterator::FindLargest() {
-  IteratorWrapper* largest = NULL;
-  for (int i = n_-1; i >= 0; i--) {
-    IteratorWrapper* child = &children_[i];
+  IteratorWrapper *largest = NULL;
+  for (int i = n_ - 1; i >= 0; i--) {
+    IteratorWrapper *child = &children_[i];
     if (child->Valid()) {
       if (largest == NULL) {
         largest = child;
@@ -893,7 +908,7 @@ void MergingIterator::FindLargest() {
 
 }  // namespace
 
-Iterator* NewMergingIterator(const Comparator* cmp, Iterator** list, int n) {
+Iterator *NewMergingIterator(const Comparator *cmp, Iterator **list, int n) {
   assert(n >= 0);
   if (n == 0) {
     return NewEmptyIterator();
@@ -911,7 +926,7 @@ Iterator* NewMergingIterator(const Comparator* cmp, Iterator** list, int n) {
 struct TableBuilder::Rep {
   Options options;
   Options index_block_options;
-  WritableFile* file;
+  WritableFile *file;
   uint64_t offset;
   Status status;
   BlockBuilder data_block;
@@ -920,7 +935,7 @@ struct TableBuilder::Rep {
   int64_t num_entries;
   // Either Finish() or Abandon() has been called.
   bool closed;
-  FilterBlockBuilder* filter_block;
+  FilterBlockBuilder *filter_block;
 
   // We do not emit the index entry for a block until we have seen the
   // first key for the next data block.  This allows us to use shorter
@@ -938,8 +953,8 @@ struct TableBuilder::Rep {
   std::string compressed_output;
 
   Rep(
-    const Options& opt,
-    WritableFile* f
+    const Options &opt,
+    WritableFile *f
   )
     : options(opt)
     , index_block_options(opt)
@@ -952,18 +967,16 @@ struct TableBuilder::Rep {
     , filter_block(opt.filter_policy == NULL
       ? NULL
       : new FilterBlockBuilder(opt.filter_policy))
-    , pending_index_entry(false)
-  {
+    , pending_index_entry(false) {
     index_block_options.block_restart_interval = 1;
   }
 };
 
 TableBuilder::TableBuilder(
-  const Options& options,
-  WritableFile* file
+  const Options &options,
+  WritableFile *file
 )
-  : rep_(new Rep(options, file))
-{
+  : rep_(new Rep(options, file)) {
   if (rep_->filter_block != NULL) {
     rep_->filter_block->StartBlock(0);
   }
@@ -976,7 +989,7 @@ TableBuilder::~TableBuilder() {
 }
 
 Status TableBuilder::ChangeOptions(
-  const Options& options
+  const Options &options
 ) {
   // Note: if more fields are added to Options, update
   // this function to catch changes that should not be allowed to
@@ -994,10 +1007,10 @@ Status TableBuilder::ChangeOptions(
 }
 
 void TableBuilder::Add(
-  const Slice& key,
-  const Slice& value
+  const Slice &key,
+  const Slice &value
 ) {
-  Rep* r = rep_;
+  Rep *r = rep_;
   assert(!r->closed);
   if (!ok()) return;
   if (r->num_entries > 0) {
@@ -1028,7 +1041,7 @@ void TableBuilder::Add(
 }
 
 void TableBuilder::Flush() {
-  Rep* r = rep_;
+  Rep *r = rep_;
   assert(!r->closed);
   if (!ok()) return;
   if (r->data_block.empty()) return;
@@ -1044,15 +1057,15 @@ void TableBuilder::Flush() {
 }
 
 void TableBuilder::WriteBlock(
-  BlockBuilder* block,
-  BlockHandle* handle
+  BlockBuilder *block,
+  BlockHandle *handle
 ) {
   // File format contains a sequence of blocks where each block has:
   //    block_data: uint8[n]
   //    type: uint8
   //    crc: uint32
   assert(ok());
-  Rep* r = rep_;
+  Rep *r = rep_;
   Slice raw = block->Finish();
 
   Slice block_contents;
@@ -1060,10 +1073,10 @@ void TableBuilder::WriteBlock(
 
   // TODO(postrelease): Support more compression options: zlib?
   if (compressor) {
-    std::string& compressed = r->compressed_output;
+    std::string &compressed = r->compressed_output;
     compressor->compress(raw.data(), raw.size(), compressed);
 
-    if ( compressed.size() < raw.size() - (raw.size() / 8u)) {
+    if (compressed.size() < raw.size() - (raw.size() / 8u)) {
       block_contents = compressed;
     } else {
       // Snappy not supported, or compressed less than 12.5%, so just
@@ -1071,7 +1084,7 @@ void TableBuilder::WriteBlock(
       block_contents = raw;
       compressor = nullptr;
     }
-  } else 
+  } else
     block_contents = raw;
 
   WriteRawBlock(block_contents, compressor, handle);
@@ -1080,11 +1093,11 @@ void TableBuilder::WriteBlock(
 }
 
 void TableBuilder::WriteRawBlock(
-  const Slice& block_contents,
-  Compressor* compressor,
-  BlockHandle* handle
+  const Slice &block_contents,
+  Compressor *compressor,
+  BlockHandle *handle
 ) {
-  Rep* r = rep_;
+  Rep *r = rep_;
   handle->set_offset(r->offset);
   handle->set_size(block_contents.size());
   r->status = r->file->Append(block_contents);
@@ -1094,7 +1107,7 @@ void TableBuilder::WriteRawBlock(
     uint32_t crc = crc32c::Value(block_contents.data(), block_contents.size());
     // Extend crc to cover block type
     crc = crc32c::Extend(crc, trailer, 1);
-    EncodeFixed32(trailer+1, crc32c::Mask(crc));
+    EncodeFixed32(trailer + 1, crc32c::Mask(crc));
     r->status = r->file->Append(Slice(trailer, kBlockTrailerSize));
     if (r->status.ok()) {
       r->offset += block_contents.size() + kBlockTrailerSize;
@@ -1107,7 +1120,7 @@ Status TableBuilder::status() const {
 }
 
 Status TableBuilder::Finish() {
-  Rep* r = rep_;
+  Rep *r = rep_;
   Flush();
   assert(!r->closed);
   r->closed = true;
@@ -1167,7 +1180,7 @@ Status TableBuilder::Finish() {
 }
 
 void TableBuilder::Abandon() {
-  Rep* r = rep_;
+  Rep *r = rep_;
   assert(!r->closed);
   r->closed = true;
 }
@@ -1187,26 +1200,26 @@ uint64_t TableBuilder::FileSize() const {
 struct Table::Rep {
   ~Rep() {
     delete filter;
-    delete [] filter_data;
+    delete[] filter_data;
     delete index_block;
   }
 
   Options options;
   Status status;
-  RandomAccessFile* file;
+  RandomAccessFile *file;
   uint64_t cache_id;
-  FilterBlockReader* filter;
-  const char* filter_data;
+  FilterBlockReader *filter;
+  const char *filter_data;
 
   BlockHandle metaindex_handle;  // Handle to metaindex_block: saved from footer
-  Block* index_block;
+  Block *index_block;
 };
 
 Status Table::Open(
-  const Options& options,
-  RandomAccessFile* file,
+  const Options &options,
+  RandomAccessFile *file,
   uint64_t size,
-  Table** table
+  Table **table
 ) {
   *table = NULL;
   if (size < Footer::kEncodedLength) {
@@ -1216,7 +1229,7 @@ Status Table::Open(
   char footer_space[Footer::kEncodedLength];
   Slice footer_input;
   Status s = file->Read(size - Footer::kEncodedLength, Footer::kEncodedLength,
-                        &footer_input, footer_space);
+    &footer_input, footer_space);
   if (!s.ok()) return s;
 
   Footer footer;
@@ -1225,7 +1238,7 @@ Status Table::Open(
 
   // Read the index block
   BlockContents contents;
-  Block* index_block = NULL;
+  Block *index_block = NULL;
   if (s.ok()) {
     ReadOptions opt;
     if (options.paranoid_checks) {
@@ -1241,7 +1254,7 @@ Status Table::Open(
   if (s.ok()) {
     // We've successfully read the footer and the index block: we're
     // ready to serve requests.
-    Rep* rep = new Table::Rep;
+    Rep *rep = new Table::Rep;
     rep->options = options;
     rep->file = file;
     rep->metaindex_handle = footer.metaindex_handle();
@@ -1259,7 +1272,7 @@ Status Table::Open(
 }
 
 void Table::ReadMeta(
-  const Footer& footer
+  const Footer &footer
 ) {
   if (rep_->options.filter_policy == NULL) {
     return;  // Do not need any metadata
@@ -1276,9 +1289,9 @@ void Table::ReadMeta(
     // Do not propagate errors since meta info is not needed for operation
     return;
   }
-  Block* meta = new Block(contents);
+  Block *meta = new Block(contents);
 
-  Iterator* iter = meta->NewIterator(BytewiseComparator());
+  Iterator *iter = meta->NewIterator(BytewiseComparator());
   std::string key = "filter.";
   key.append(rep_->options.filter_policy->Name());
   iter->Seek(key);
@@ -1290,7 +1303,7 @@ void Table::ReadMeta(
 }
 
 void Table::ReadFilter(
-  const Slice& filter_handle_value
+  const Slice &filter_handle_value
 ) {
   Slice v = filter_handle_value;
   BlockHandle filter_handle;
@@ -1319,40 +1332,40 @@ Table::~Table() {
 }
 
 static void DeleteBlock(
-  void* arg,
-  void* ignored
+  void *arg,
+  void *ignored
 ) {
-  delete reinterpret_cast<Block*>(arg);
+  delete reinterpret_cast<Block *>(arg);
 }
 
 static void DeleteCachedBlock(
-  const Slice& key,
-  void* value
+  const Slice &key,
+  void *value
 ) {
-  Block* block = reinterpret_cast<Block*>(value);
+  Block *block = reinterpret_cast<Block *>(value);
   delete block;
 }
 
 static void ReleaseBlock(
-  void* arg,
-  void* h
+  void *arg,
+  void *h
 ) {
-  Cache* cache = reinterpret_cast<Cache*>(arg);
-  Cache::Handle* handle = reinterpret_cast<Cache::Handle*>(h);
+  Cache *cache = reinterpret_cast<Cache *>(arg);
+  Cache::Handle *handle = reinterpret_cast<Cache::Handle *>(h);
   cache->Release(handle);
 }
 
 // Convert an index iterator value (i.e., an encoded BlockHandle)
 // into an iterator over the contents of the corresponding block.
-Iterator* Table::BlockReader(
-  void* arg,
-  const ReadOptions& options,
-  const Slice& index_value
+Iterator *Table::BlockReader(
+  void *arg,
+  const ReadOptions &options,
+  const Slice &index_value
 ) {
-  Table* table = reinterpret_cast<Table*>(arg);
-  Cache* block_cache = table->rep_->options.block_cache;
-  Block* block = NULL;
-  Cache::Handle* cache_handle = NULL;
+  Table *table = reinterpret_cast<Table *>(arg);
+  Cache *block_cache = table->rep_->options.block_cache;
+  Block *block = NULL;
+  Cache::Handle *cache_handle = NULL;
 
   BlockHandle handle;
   Slice input = index_value;
@@ -1365,30 +1378,30 @@ Iterator* Table::BlockReader(
     if (block_cache != NULL) {
       char cache_key_buffer[16];
       EncodeFixed64(cache_key_buffer, table->rep_->cache_id);
-      EncodeFixed64(cache_key_buffer+8, handle.offset());
+      EncodeFixed64(cache_key_buffer + 8, handle.offset());
       Slice key(cache_key_buffer, sizeof(cache_key_buffer));
       cache_handle = block_cache->Lookup(key);
       if (cache_handle != NULL) {
-        block = reinterpret_cast<Block*>(block_cache->Value(cache_handle));
+        block = reinterpret_cast<Block *>(block_cache->Value(cache_handle));
       } else {
-      s = ReadBlock(table->rep_->file, table->rep_->options, options, handle, &contents);
+        s = ReadBlock(table->rep_->file, table->rep_->options, options, handle, &contents);
         if (s.ok()) {
           block = new Block(contents);
           if (contents.cachable && options.fill_cache) {
             cache_handle = block_cache->Insert(
-                key, block, block->size(), &DeleteCachedBlock);
+              key, block, block->size(), &DeleteCachedBlock);
           }
         }
       }
     } else {
-    s = ReadBlock(table->rep_->file, table->rep_->options, options, handle, &contents);
+      s = ReadBlock(table->rep_->file, table->rep_->options, options, handle, &contents);
       if (s.ok()) {
         block = new Block(contents);
       }
     }
   }
 
-  Iterator* iter;
+  Iterator *iter;
   if (block != NULL) {
     iter = block->NewIterator(table->rep_->options.comparator);
     if (cache_handle == NULL) {
@@ -1402,37 +1415,37 @@ Iterator* Table::BlockReader(
   return iter;
 }
 
-Iterator* Table::NewIterator(
-  const ReadOptions& options
+Iterator *Table::NewIterator(
+  const ReadOptions &options
 ) const {
   return NewTwoLevelIterator(
     rep_->index_block->NewIterator(rep_->options.comparator),
     &Table::BlockReader,
-    const_cast<Table*>(this),
+    const_cast<Table *>(this),
     options);
 }
 
 Status Table::InternalGet(
-  const ReadOptions& options,
-  const Slice& k,
-  void* arg,
-  void (*saver)(void*, const Slice&, const Slice&)
+  const ReadOptions &options,
+  const Slice &k,
+  void *arg,
+  void (*saver)(void *, const Slice &, const Slice &)
 ) {
   Status s;
-  Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
+  Iterator *iiter = rep_->index_block->NewIterator(rep_->options.comparator);
   iiter->Seek(k);
   if (iiter->Valid()) {
     Slice handle_value = iiter->value();
-    FilterBlockReader* filter = rep_->filter;
+    FilterBlockReader *filter = rep_->filter;
     BlockHandle handle;
     if (
       filter != NULL
       && handle.DecodeFrom(&handle_value).ok()
       && !filter->KeyMayMatch(handle.offset(), k)
-    ) {
+      ) {
       // Not found
     } else {
-      Iterator* block_iter = BlockReader(this, options, iiter->value());
+      Iterator *block_iter = BlockReader(this, options, iiter->value());
       block_iter->Seek(k);
       if (block_iter->Valid()) {
         (*saver)(arg, block_iter->key(), block_iter->value());
@@ -1449,9 +1462,9 @@ Status Table::InternalGet(
 }
 
 uint64_t Table::ApproximateOffsetOf(
-  const Slice& key
+  const Slice &key
 ) const {
-  Iterator* index_iter = rep_->index_block->NewIterator(rep_->options.comparator);
+  Iterator *index_iter = rep_->index_block->NewIterator(rep_->options.comparator);
   index_iter->Seek(key);
   uint64_t result;
   if (index_iter->Valid()) {
@@ -1490,12 +1503,12 @@ public:
   TwoLevelIterator(
     Iterator *index_iter,
     BlockFunction block_function,
-    void* arg,
+    void *arg,
     const ReadOptions &options);
 
   virtual ~TwoLevelIterator();
 
-  virtual void Seek(const Slice& target);
+  virtual void Seek(const Slice &target);
   virtual void SeekToFirst();
   virtual void SeekToLast();
   virtual void Next();
@@ -1523,17 +1536,17 @@ public:
     }
   }
 
- private:
-  void SaveError(const Status& s) {
+private:
+  void SaveError(const Status &s) {
     if (status_.ok() && !s.ok()) status_ = s;
   }
   void SkipEmptyDataBlocksForward();
   void SkipEmptyDataBlocksBackward();
-  void SetDataIterator(Iterator* data_iter);
+  void SetDataIterator(Iterator *data_iter);
   void InitDataBlock();
 
   BlockFunction block_function_;
-  void* arg_;
+  void *arg_;
   const ReadOptions options_;
   Status status_;
   IteratorWrapper index_iter_;
@@ -1544,21 +1557,19 @@ public:
 };
 
 TwoLevelIterator::TwoLevelIterator(
-    Iterator* index_iter,
-    BlockFunction block_function,
-    void* arg,
-    const ReadOptions& options)
-    : block_function_(block_function),
-      arg_(arg),
-      options_(options),
-      index_iter_(index_iter),
-      data_iter_(NULL) {
-}
+  Iterator *index_iter,
+  BlockFunction block_function,
+  void *arg,
+  const ReadOptions &options)
+  : block_function_(block_function),
+  arg_(arg),
+  options_(options),
+  index_iter_(index_iter),
+  data_iter_(NULL) {}
 
-TwoLevelIterator::~TwoLevelIterator() {
-}
+TwoLevelIterator::~TwoLevelIterator() {}
 
-void TwoLevelIterator::Seek(const Slice& target) {
+void TwoLevelIterator::Seek(const Slice &target) {
   index_iter_.Seek(target);
   InitDataBlock();
   if (data_iter_.iter() != NULL) data_iter_.Seek(target);
@@ -1617,7 +1628,7 @@ void TwoLevelIterator::SkipEmptyDataBlocksBackward() {
   }
 }
 
-void TwoLevelIterator::SetDataIterator(Iterator* data_iter) {
+void TwoLevelIterator::SetDataIterator(Iterator *data_iter) {
   if (data_iter_.iter() != NULL) SaveError(data_iter_.status());
   data_iter_.Set(data_iter);
 }
@@ -1631,7 +1642,7 @@ void TwoLevelIterator::InitDataBlock() {
       // data_iter_ is already constructed with this iterator, so
       // no need to change anything
     } else {
-      Iterator* iter = (*block_function_)(arg_, options_, handle);
+      Iterator *iter = (*block_function_)(arg_, options_, handle);
       data_block_handle_.assign(handle.data(), handle.size());
       SetDataIterator(iter);
     }
