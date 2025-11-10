@@ -3,7 +3,7 @@
 #include "leveldb_config.h"
 #include "leveldb_internal.h"
 
-#ifdef LEVELDB_SNAPPY
+#ifndef LEVELDB_DISABLE_SNAPPY
 
 namespace leveldb {
 

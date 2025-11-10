@@ -1,6 +1,6 @@
 #include "leveldb_config.h"
 
-#ifdef LEVELDB_ZLIB
+#ifndef LEVELDB_DISABLE_ZLIB
 
 #include "leveldb_internal.h"
 #include "leveldb_compressor_zlib.h"

@@ -10,7 +10,7 @@
 #include <unistd.h>
 #endif
 #include "leveldb_compressor_zlib.h"
-#ifdef LEVELDB_SNAPPY
+#ifndef LEVELDB_DISABLE_SNAPPY
 #include "leveldb_compressor_snappy.h"
 #endif
 
@@ -474,19 +474,26 @@ void leveldb_options_set_compression(leveldb_options_t *opt, int t) {
     case 0:
       opt->rep.compressors[0] = nullptr;
       break;
-#ifdef LEVELDB_SNAPPY
+
+#ifndef LEVELDB_DISABLE_SNAPPY
+
     case leveldb_snappy_compression:
       opt->rep.compressors[0] = new leveldb::SnappyCompressor();
       break;
+
 #endif
-#ifdef LEVELDB_ZLIB
+
+#ifndef LEVELDB_DISABLE_ZLIB
+
     case leveldb_zlib_compression:
       opt->rep.compressors[0] = new leveldb::ZlibCompressor();
       break;
     case leveldb_zlib_raw_compression:
       opt->rep.compressors[0] = new leveldb::ZlibCompressorRaw();
       break;
+
 #endif
+
   }
 }
 

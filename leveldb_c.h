@@ -46,7 +46,12 @@ extern "C" {
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
+
 #include "leveldb_config.h"
+
+#ifndef LEVELDB_C_DLLX
+#define LEVELDB_C_DLLX
+#endif
 
 /* Exported types */
 

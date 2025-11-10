@@ -47,11 +47,11 @@
 #include "leveldb_internal.h"
 #include "leveldb_backend.h"
 
-#if defined(LEVELDB_SNAPPY)
+#if !defined(LEVELDB_DISABLE_SNAPPY)
   #include <snappy/snappy.h>
 #endif
 
-#if defined(LEVELDB_ZLIB)
+#if !defined(LEVELDB_DISABLE_ZLIB)
   #include <zlib.h>
 #endif
 

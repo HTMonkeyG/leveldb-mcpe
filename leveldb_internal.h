@@ -18,13 +18,10 @@
 #include <deque>
 #include <set>
 
-#include "port/thread_annotations.h"
+#include "leveldb_thread_annotations.h"
 #include "leveldb_backend.h"
 #include "leveldb_config.h"
-
-#ifndef STORAGE_LEVELDB_INCLUDE_LEVELDB_H_
 #include "leveldb.h"
-#endif
 
 namespace leveldb {
 

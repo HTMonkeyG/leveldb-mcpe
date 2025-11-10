@@ -21,7 +21,7 @@ CPP_SRC = ./leveldb.cc\
 					./leveldb_env.cc\
 					./backends/leveldb_impl_posix_sse.cc\
 					./backends/leveldb_impl_win32.cc\
-					#./compressors/leveldb_compressor_zlib.cc
+					./compressors/leveldb_compressor_zlib.cc
 CPP_OBJ = $(addprefix $(DIST_DIR)/, $(notdir $(CPP_SRC:.cc=.o)))
 
 TARGET = leveldb.lib

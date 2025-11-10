@@ -1,6 +1,6 @@
 #include "leveldb_config.h"
 
-#ifdef LEVELDB_SNAPPY
+#ifndef LEVELDB_DISABLE_SNAPPY
 
 #include <snappy/snappy.h>
 #include "leveldb_compressor_snappy.h"

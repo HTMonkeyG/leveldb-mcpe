@@ -3,7 +3,7 @@
 #include "leveldb_config.h"
 #include "leveldb_internal.h"
 
-#ifdef LEVELDB_ZLIB
+#ifndef LEVELDB_DISABLE_ZLIB
 
 namespace leveldb {
 
