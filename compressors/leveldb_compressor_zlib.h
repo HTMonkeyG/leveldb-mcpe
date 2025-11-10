@@ -1,11 +1,13 @@
-
 #pragma once
 
+#include "leveldb_config.h"
 #include "leveldb_internal.h"
+
+#ifdef LEVELDB_ZLIB
 
 namespace leveldb {
 
-class DLLX ZlibCompressorBase: public Compressor {
+class LEVELDB_DLLX ZlibCompressorBase: public Compressor {
 public:
 
   int inflate(const char* input, size_t length, ::std::string &output) const;
@@ -44,7 +46,7 @@ private:
   int _window() const;
 };
 
-class DLLX ZlibCompressor: public ZlibCompressorBase {
+class LEVELDB_DLLX ZlibCompressor: public ZlibCompressorBase {
 public:
 
   static const int SERIALIZE_ID = 2;
@@ -53,7 +55,7 @@ public:
     : ZlibCompressorBase(SERIALIZE_ID, compressionLevel, false) { }
 };
 
-class DLLX ZlibCompressorRaw: public ZlibCompressorBase {
+class LEVELDB_DLLX ZlibCompressorRaw: public ZlibCompressorBase {
 public:
 
   static const int SERIALIZE_ID = 4;
@@ -63,3 +65,5 @@ public:
 };
 
 }
+
+#endif

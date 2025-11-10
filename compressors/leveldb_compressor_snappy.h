@@ -1,10 +1,13 @@
 #pragma once
 
+#include "leveldb_config.h"
 #include "leveldb_internal.h"
+
+#ifdef LEVELDB_SNAPPY
 
 namespace leveldb {
 
-class DLLX SnappyCompressor : public Compressor  {
+class LEVELDB_DLLX SnappyCompressor : public Compressor  {
 public:
 
   static const char SERIALIZE_ID = 1;
@@ -28,3 +31,5 @@ public:
 };
 
 }
+
+#endif

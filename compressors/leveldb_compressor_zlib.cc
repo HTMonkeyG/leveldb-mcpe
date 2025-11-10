@@ -1,7 +1,9 @@
-#ifndef NO_ZLIB
+#include "leveldb_config.h"
 
-#include "leveldb/leveldb_internal.h"
-#include "leveldb/zlib_compressor.h"
+#ifdef LEVELDB_ZLIB
+
+#include "leveldb_internal.h"
+#include "leveldb_compressor_zlib.h"
 
 #include <zlib.h>
 #include <algorithm>
