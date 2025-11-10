@@ -19,7 +19,7 @@ CPP_SRC = ./leveldb.cc\
 					./leveldb_utils.cc\
 					./leveldb_crc32c.cc\
 					./leveldb_env.cc\
-					./port/port_posix_sse.cc\
+					./backends/leveldb_impl_posix_sse.cc\
 					./backends/leveldb_impl_win32.cc\
 					#./compressors/leveldb_compressor_zlib.cc
 CPP_OBJ = $(addprefix $(DIST_DIR)/, $(notdir $(CPP_SRC:.cc=.o)))
