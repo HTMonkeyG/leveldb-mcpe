@@ -8,9 +8,9 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <vector>
+
 #include "leveldb.h"
 #include "leveldb_internal.h"
-#include "port/port.h"
 
 namespace leveldb {
 
@@ -1709,7 +1709,7 @@ Status DB::Open(
 
 Snapshot::~Snapshot() {}
 
-DLLX Status DestroyDB(const std::string &dbname, const Options &options) {
+LEVELDB_DLLX Status DestroyDB(const std::string &dbname, const Options &options) {
   Env *env = options.env;
   std::vector<std::string> filenames;
   // Ignore error in case directory does not exist
@@ -3492,7 +3492,7 @@ private:
 };
 }  // namespace
 
-DLLX Status RepairDB(const std::string &dbname, const Options &options) {
+LEVELDB_DLLX Status RepairDB(const std::string &dbname, const Options &options) {
   Repairer repairer(dbname, options);
   return repairer.Run();
 }

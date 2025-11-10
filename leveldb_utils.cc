@@ -10,7 +10,7 @@
 #include <stdarg.h>
 #include <algorithm>
 
-#include "port/port.h"
+#include "leveldb_backend.h"
 #include "leveldb_internal.h"
 
 namespace leveldb {
@@ -161,7 +161,7 @@ public:
 };
 }
 
-DLLX const FilterPolicy *NewBloomFilterPolicy(int bits_per_key) {
+LEVELDB_DLLX const FilterPolicy *NewBloomFilterPolicy(int bits_per_key) {
   return new BloomFilterPolicy(bits_per_key);
 }
 
@@ -559,7 +559,7 @@ public:
 
 }  // end anonymous namespace
 
-DLLX Cache *NewLRUCache(size_t capacity) {
+LEVELDB_DLLX Cache *NewLRUCache(size_t capacity) {
   return new ShardedLRUCache(capacity);
 }
 
