@@ -2,8 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-#ifndef STORAGE_LEVELDB_INCLUDE_LEVELDB_INTERNAL_H_
-#define STORAGE_LEVELDB_INCLUDE_LEVELDB_INTERNAL_H_
+#pragma once
 
 #include <stdint.h>
 #include <assert.h>
@@ -19,10 +18,13 @@
 #include <deque>
 #include <set>
 
-#include "port/port.h"
 #include "port/thread_annotations.h"
+#include "leveldb_backend.h"
 #include "leveldb_config.h"
+
+#ifndef STORAGE_LEVELDB_INCLUDE_LEVELDB_H_
 #include "leveldb.h"
+#endif
 
 namespace leveldb {
 
@@ -40,26 +42,26 @@ namespace log {
   class Writer;
 }
 
-class DLLX BlockBuilder;
-class DLLX BlockHandle;
-class DLLX Cache;
-class DLLX Comparator;
-class DLLX Compressor;
-class DLLX DecompressAllocator;
-class DLLX Env;
-class DLLX FileLock;
-class DLLX FilterPolicy;
-class DLLX Footer;
-class DLLX Iterator;
-class DLLX Logger;
-class DLLX RandomAccessFile;
-class DLLX SequentialFile;
-class DLLX Slice;
-class DLLX Status;
-class DLLX TableBuilder;
-class DLLX TableCache;
-class DLLX WriteBatch;
-class DLLX WritableFile;
+class LEVELDB_DLLX BlockBuilder;
+class LEVELDB_DLLX BlockHandle;
+class LEVELDB_DLLX Cache;
+class LEVELDB_DLLX Comparator;
+class LEVELDB_DLLX Compressor;
+class LEVELDB_DLLX DecompressAllocator;
+class LEVELDB_DLLX Env;
+class LEVELDB_DLLX FileLock;
+class LEVELDB_DLLX FilterPolicy;
+class LEVELDB_DLLX Footer;
+class LEVELDB_DLLX Iterator;
+class LEVELDB_DLLX Logger;
+class LEVELDB_DLLX RandomAccessFile;
+class LEVELDB_DLLX SequentialFile;
+class LEVELDB_DLLX Slice;
+class LEVELDB_DLLX Status;
+class LEVELDB_DLLX TableBuilder;
+class LEVELDB_DLLX TableCache;
+class LEVELDB_DLLX WriteBatch;
+class LEVELDB_DLLX WritableFile;
 
 class Compaction;
 class DBImpl;
@@ -73,6 +75,57 @@ class SnapshotList;
 
 template<typename Key, class Comparator>
 class SkipList;
+
+// ----------------------------------------------------------------------------
+// - util/Filepath.h
+// ----------------------------------------------------------------------------
+
+namespace port {
+
+#if defined(_MSC_VER)
+// std::strings won't work for windows as all their STL/Win32 APIs assume char* are pure ASCII
+// "luckily", there is an unofficial parameter for iostream that takes a wide character Unicode string
+typedef std::wstring filepath;
+typedef wchar_t filepath_char;
+#define _FILE_STR(str) L ## str
+#else
+typedef std::string filepath;
+typedef char filepath_char;
+#define _FILE_STR(str) str
+#endif
+
+
+inline filepath toFilePath(const std::string &string) {
+#if defined(_MSC_VER)
+  std::wstring_convert<std::codecvt_utf8<wchar_t>, wchar_t> converter;
+  return std::move(converter.from_bytes(string));
+#else
+  return std::move(string);
+#endif
+}
+
+#if defined(_MSC_VER)
+inline FILE *fopen_mb(const filepath_char *filename, const filepath_char *mode) {
+  FILE *file = nullptr;
+
+  errno_t error = _wfopen_s(&file, filename, mode);
+  _set_errno(error);
+
+  return file;
+}
+
+// this function will silently allocate memory on windows to convert char* to wchar_t*
+inline FILE *fopen_mb(const char *const filename, const filepath_char *mode) {
+  filepath path = toFilePath(filename);
+
+  return port::fopen_mb(path.c_str(), mode);
+}
+#else
+inline FILE *fopen_mb(const filepath_char *filename, const filepath_char *mode) {
+  return ::fopen(filename, mode);
+}
+#endif
+}
 
 // ----------------------------------------------------------------------------
 // - utils/arena.h
@@ -430,9 +483,9 @@ public:
 // of Cache uses a least-recently-used eviction policy.
 // ----------------------------------------------------------------------------
 
-extern DLLX Cache *NewLRUCache(size_t capacity);
+extern LEVELDB_DLLX Cache *NewLRUCache(size_t capacity);
 
-class DLLX Cache {
+class LEVELDB_DLLX Cache {
 public:
 
   Cache() { }
@@ -442,7 +495,7 @@ public:
   virtual ~Cache();
 
   // Opaque handle to an entry stored in the cache.
-  struct DLLX Handle { };
+  struct LEVELDB_DLLX Handle { };
 
   // Insert a mapping from key->value into the cache and assign it
   // the specified charge against the total cache capacity.
@@ -507,7 +560,7 @@ private:
   void LRU_Append(Handle *e);
   void Unref(Handle *e);
 
-  struct DLLX Rep;
+  struct LEVELDB_DLLX Rep;
   Rep *rep_;
 
   // No copying allowed
@@ -519,7 +572,7 @@ private:
 // - compressor.h
 // ----------------------------------------------------------------------------
 
-class DLLX Compressor {
+class LEVELDB_DLLX Compressor {
 public:
 
   uint64_t inputBytes = 0, compressedBytes = 0;
@@ -600,7 +653,7 @@ private:
 // external synchronization.
 // ----------------------------------------------------------------------------
 
-class DLLX WriteBatch {
+class LEVELDB_DLLX WriteBatch {
 public:
 
   WriteBatch();
@@ -626,7 +679,7 @@ public:
   size_t ApproximateSize();
 
   // Support for iterating over the contents of a batch.
-  class DLLX Handler {
+  class LEVELDB_DLLX Handler {
   public:
     virtual ~Handler();
     virtual void Put(const Slice &key, const Slice &value) = 0;
@@ -649,7 +702,7 @@ private:
 // A Table is a sorted map from strings to strings.  Tables are
 // immutable and persistent.  A Table may be safely accessed from
 // multiple threads without external synchronization.
-class DLLX Table {
+class LEVELDB_DLLX Table {
 public:
   // Attempt to open the table that is stored in bytes [0..file_size)
   // of "file", and read the metadata entries necessary to allow
@@ -685,7 +738,7 @@ public:
   uint64_t ApproximateOffsetOf(const Slice &key) const;
 
 private:
-  struct DLLX Rep;
+  struct LEVELDB_DLLX Rep;
   Rep *rep_;
 
   explicit Table(Rep *rep) {
@@ -696,7 +749,7 @@ private:
   // Calls (*handle_result)(arg, ...) with the entry found after a call
   // to Seek(key).  May not make such a call if filter policy says
   // that key is not present.
-  friend class DLLX TableCache;
+  friend class LEVELDB_DLLX TableCache;
   Status InternalGet(
     const ReadOptions &, const Slice &key,
     void *arg,
@@ -722,7 +775,7 @@ private:
 // external synchronization.
 // ----------------------------------------------------------------------------
 
-class DLLX TableBuilder {
+class LEVELDB_DLLX TableBuilder {
 public:
   // Create a builder that will store the contents of the table it is
   // building in *file.  Does not close the file.  It is up to the
@@ -780,7 +833,7 @@ private:
   void WriteBlock(BlockBuilder *block, BlockHandle *handle);
   void WriteRawBlock(const Slice &data, Compressor *compressor, BlockHandle *handle);
 
-  struct DLLX Rep;
+  struct LEVELDB_DLLX Rep;
   Rep *rep_;
 
   // No copying allowed
@@ -803,7 +856,7 @@ private:
 // NewBloomFilterPolicy() below).
 // ----------------------------------------------------------------------------
 
-class DLLX FilterPolicy {
+class LEVELDB_DLLX FilterPolicy {
 public:
   virtual ~FilterPolicy();
 
@@ -844,7 +897,7 @@ public:
 // ignores trailing spaces, it would be incorrect to use a
 // FilterPolicy (like NewBloomFilterPolicy) that does not ignore
 // trailing spaces in keys.
-extern DLLX const FilterPolicy *NewBloomFilterPolicy(int bits_per_key);
+extern LEVELDB_DLLX const FilterPolicy *NewBloomFilterPolicy(int bits_per_key);
 
 // ----------------------------------------------------------------------------
 // - env.h
@@ -858,7 +911,7 @@ extern DLLX const FilterPolicy *NewBloomFilterPolicy(int bits_per_key);
 // multiple threads without any external synchronization.
 // ----------------------------------------------------------------------------
 
-class DLLX Env {
+class LEVELDB_DLLX Env {
 public:
   Env() { }
   virtual ~Env();
@@ -1038,7 +1091,7 @@ private:
 };
 
 // A file abstraction for reading sequentially through a file
-class DLLX SequentialFile {
+class LEVELDB_DLLX SequentialFile {
 public:
   SequentialFile() { }
   virtual ~SequentialFile();
@@ -1077,7 +1130,7 @@ private:
 };
 
 // A file abstraction for randomly reading the contents of a file.
-class DLLX RandomAccessFile {
+class LEVELDB_DLLX RandomAccessFile {
 public:
   RandomAccessFile() { }
   virtual ~RandomAccessFile();
@@ -1109,7 +1162,7 @@ private:
 // A file abstraction for sequential writing.  The implementation
 // must provide buffering since callers may append small fragments
 // at a time to the file.
-class DLLX WritableFile {
+class LEVELDB_DLLX WritableFile {
 public:
   WritableFile() { }
   virtual ~WritableFile();
@@ -1129,29 +1182,8 @@ private:
     const WritableFile &);
 };
 
-// An interface for writing log messages.
-class DLLX Logger {
-public:
-  Logger() { }
-  virtual ~Logger();
-
-  // Write an entry to the log file with the specified format.
-  virtual void Logv(
-    const char *format,
-    va_list ap
-  ) = 0;
-
-private:
-  // No copying allowed
-  Logger(
-    const Logger &);
-  void operator=(
-    const Logger &);
-};
-
-
 // Identifies a locked file.
-class DLLX FileLock {
+class LEVELDB_DLLX FileLock {
 public:
   FileLock() { }
   virtual ~FileLock();
@@ -1184,7 +1216,7 @@ extern Status ReadFileToString(Env *env, const std::string &fname,
 // An implementation of Env that forwards all calls to another Env.
 // May be useful to clients who wish to override just part of the
 // functionality of another Env.
-class DLLX EnvWrapper: public Env {
+class LEVELDB_DLLX EnvWrapper: public Env {
 public:
   // Initialize an EnvWrapper that delegates all calls to *t
   explicit EnvWrapper(Env *t): target_(t) { }
@@ -1261,7 +1293,7 @@ private:
 // - decompress_allocator.h
 // ----------------------------------------------------------------------------
 
-class DLLX DecompressAllocator {
+class LEVELDB_DLLX DecompressAllocator {
 public:
   virtual ~DecompressAllocator();
 
@@ -1296,7 +1328,7 @@ Status DumpFile(Env *env, const std::string &fname, WritableFile *dst);
 // used as keys in an sstable or a database.  A Comparator implementation
 // must be thread-safe since leveldb may invoke its methods concurrently
 // from multiple threads.
-class DLLX Comparator {
+class LEVELDB_DLLX Comparator {
 public:
   virtual ~Comparator();
 
@@ -3433,5 +3465,3 @@ extern Options SanitizeOptions(
   const Options &src);
 
 }  // namespace leveldb
-
-#endif  // STORAGE_LEVELDB_INCLUDE_LEVELDB_INTERNAL_H_

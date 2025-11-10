@@ -1,11 +1,18 @@
-#ifndef STORAGE_LEVELDB_INCLUDE_LEVELDB_CONFIG_H_
-#define STORAGE_LEVELDB_INCLUDE_LEVELDB_CONFIG_H_
+#pragma once
 
-//#define DLLX __declspec(dllexport)
-//#define DLLX __declspec(dllimport)
+//#define LEVELDB_DLLX __declspec(dllexport)
+//#define LEVELDB_DLLX __declspec(dllimport)
 
-#ifndef DLLX
-#define DLLX
+#ifndef LEVELDB_DLLX
+#define LEVELDB_DLLX
 #endif
 
+//#define LEVELDB_C_DLLX __declspec(dllexport)
+//#define LEVELDB_C_DLLX __declspec(dllimport)
+
+#ifndef LEVELDB_C_DLLX
+#define LEVELDB_C_DLLX
 #endif
+
+//#define LEVELDB_SNAPPY
+//#define LEVELDB_ZLIB

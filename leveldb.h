@@ -1,5 +1,4 @@
-#ifndef STORAGE_LEVELDB_INCLUDE_LEVELDB_H_
-#define STORAGE_LEVELDB_INCLUDE_LEVELDB_H_
+#pragma once
 
 #include <stdint.h>
 #include <stdio.h>
@@ -12,27 +11,52 @@
 
 namespace leveldb {
 
-struct DLLX Options;
-struct DLLX ReadOptions;
-struct DLLX WriteOptions;
+struct LEVELDB_DLLX Options;
+struct LEVELDB_DLLX ReadOptions;
+struct LEVELDB_DLLX WriteOptions;
 
-class DLLX Cache;
-class DLLX Comparator;
-class DLLX Compressor;
-class DLLX DecompressAllocator;
-class DLLX Env;
-class DLLX FilterPolicy;
-class DLLX Iterator;
-class DLLX Logger;
-class DLLX Slice;
-class DLLX Snapshot;
-class DLLX Status;
-class DLLX WriteBatch;
+class LEVELDB_DLLX Cache;
+class LEVELDB_DLLX Comparator;
+class LEVELDB_DLLX Compressor;
+class LEVELDB_DLLX DecompressAllocator;
+class LEVELDB_DLLX Env;
+class LEVELDB_DLLX FilterPolicy;
+class LEVELDB_DLLX Iterator;
+class LEVELDB_DLLX Slice;
+class LEVELDB_DLLX Snapshot;
+class LEVELDB_DLLX Status;
+class LEVELDB_DLLX WriteBatch;
 
-/* slice.h */
+// ----------------------------------------------------------------------------
+// - env.h
+// ----------------------------------------------------------------------------
+
+// An interface for writing log messages.
+class LEVELDB_DLLX Logger {
+public:
+  Logger() { }
+  virtual ~Logger();
+
+  // Write an entry to the log file with the specified format.
+  virtual void Logv(
+    const char *format,
+    va_list ap
+  ) = 0;
+
+private:
+  // No copying allowed
+  Logger(
+    const Logger &);
+  void operator=(
+    const Logger &);
+};
+
+// ----------------------------------------------------------------------------
+// - slice.h
+// ----------------------------------------------------------------------------
 
 // Data slice.
-class DLLX Slice {
+class LEVELDB_DLLX Slice {
 public:
 
   // Create an empty slice.
@@ -160,9 +184,11 @@ inline int Slice::compare(
   return r;
 }
 
-/* status.h */
+// ----------------------------------------------------------------------------
+// - status.h
+// ----------------------------------------------------------------------------
 
-class DLLX Status {
+class LEVELDB_DLLX Status {
 public:
 
   enum Code {
@@ -268,10 +294,12 @@ inline void Status::operator=(const Status &s) {
   }
 }
 
-/* options.h */
+// ----------------------------------------------------------------------------
+// - options.h
+// ----------------------------------------------------------------------------
 
 // Options to control the behavior of a database (passed to DB::Open)
-struct DLLX Options {
+struct LEVELDB_DLLX Options {
   // -------------------
   // Parameters that affect behavior
 
@@ -401,7 +429,7 @@ struct DLLX Options {
 };
 
 // Options that control read operations
-struct DLLX ReadOptions {
+struct LEVELDB_DLLX ReadOptions {
   // If true, all data read from underlying storage will be
   // verified against corresponding checksums.
   // Default: false
@@ -431,7 +459,7 @@ struct DLLX ReadOptions {
 };
 
 // Options that control write operations
-struct DLLX WriteOptions {
+struct LEVELDB_DLLX WriteOptions {
   // If true, the write will be flushed from the operating system
   // buffer cache (by calling WritableFile::Sync()) before the write
   // is considered complete.  If this flag is true, writes will be
@@ -454,18 +482,20 @@ struct DLLX WriteOptions {
     : sync(false) { }
 };
 
-/* db.h */
+// ----------------------------------------------------------------------------
+// - db.h
+// ----------------------------------------------------------------------------
 
 // Abstract handle to particular state of a DB.
 // A Snapshot is an immutable object and can therefore be safely
 // accessed from multiple threads without any external synchronization.
-class DLLX Snapshot {
+class LEVELDB_DLLX Snapshot {
 protected:
   virtual ~Snapshot();
 };
 
 // A range of keys
-struct DLLX Range {
+struct LEVELDB_DLLX Range {
   Slice start;          // Included in the range
   Slice limit;          // Not included in the range
 
@@ -476,7 +506,7 @@ struct DLLX Range {
 // A DB is a persistent ordered map from keys to values.
 // A DB is safe for concurrent access from multiple threads without
 // any external synchronization.
-class DLLX DB {
+class LEVELDB_DLLX DB {
 public:
   // Open the database with the specified "name".
   // Stores a pointer to a heap-allocated database in *dbptr and returns
@@ -598,17 +628,19 @@ private:
 
 // Destroy the contents of the specified database.
 // Be very careful using this method.
-extern DLLX Status DestroyDB(const std::string &name, const Options &options);
+extern LEVELDB_DLLX Status DestroyDB(const std::string &name, const Options &options);
 
 // If a DB cannot be opened, you may attempt to call this method to
 // resurrect as much of the contents of the database as possible.
 // Some data may be lost, so be careful when calling this function
 // on a database that contains important information.
-extern DLLX Status RepairDB(const std::string &dbname, const Options &options);
+extern LEVELDB_DLLX Status RepairDB(const std::string &dbname, const Options &options);
 
-/* iterator.h */
+// ----------------------------------------------------------------------------
+// - iterator.h
+// ----------------------------------------------------------------------------
 
-class DLLX Iterator {
+class LEVELDB_DLLX Iterator {
 public:
   Iterator();
   virtual ~Iterator();
@@ -664,7 +696,7 @@ public:
   void RegisterCleanup(CleanupFunction function, void *arg1, void *arg2);
 
 private:
-  struct DLLX Cleanup {
+  struct LEVELDB_DLLX Cleanup {
     CleanupFunction function;
     void *arg1;
     void *arg2;
@@ -684,5 +716,3 @@ extern Iterator *NewEmptyIterator();
 extern Iterator *NewErrorIterator(const Status &status);
 
 }; // namespace leveldb
-
-#endif
