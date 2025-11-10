@@ -10,6 +10,7 @@ leveldbutil
 bin/
 *.txt
 *.exe
+*.dll
 
 CMakeCache*
 *.cmake

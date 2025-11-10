@@ -9,9 +9,9 @@
 #ifndef _WIN32
 #include <unistd.h>
 #endif
-#include "compressors/zlib_compressor.h"
-#ifdef SNAPPY
-#include "compressors/snappy_compressor.h"
+#include "leveldb_compressor_zlib.h"
+#ifdef LEVELDB_SNAPPY
+#include "leveldb_compressor_snappy.h"
 #endif
 
 using leveldb::Cache;
@@ -474,17 +474,19 @@ void leveldb_options_set_compression(leveldb_options_t *opt, int t) {
     case 0:
       opt->rep.compressors[0] = nullptr;
       break;
-#ifdef SNAPPY
+#ifdef LEVELDB_SNAPPY
     case leveldb_snappy_compression:
       opt->rep.compressors[0] = new leveldb::SnappyCompressor();
       break;
 #endif
+#ifdef LEVELDB_ZLIB
     case leveldb_zlib_compression:
       opt->rep.compressors[0] = new leveldb::ZlibCompressor();
       break;
     case leveldb_zlib_raw_compression:
       opt->rep.compressors[0] = new leveldb::ZlibCompressorRaw();
       break;
+#endif
   }
 }
 
@@ -634,4 +636,4 @@ int leveldb_minor_version() {
   return kMinorVersion;
 }
 
-}  // end extern "C"
+} // end extern "C"
